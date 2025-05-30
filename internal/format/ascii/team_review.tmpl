@@ -1,0 +1,23 @@
+{{- range .Workloads}}
+{{$workload := .}}
+{{formatBoxTitle (bold .User.Username)}}
+│ Active MRs: {{.MRCount}}
+{{- if .ActiveMRs}}
+│
+{{- range $index, $mr := .ActiveMRs}}
+│   * {{$mr.Title}} ({{getRole $mr $workload.User}})
+│     URL: {{$mr.WebURL}}
+{{- if $mr.Author}}
+│     Author: {{$mr.Author.Username}}
+{{- end}}
+{{- if $mr.Description}}
+│     Description: {{truncateDescription $mr.Description}}
+{{- end}}
+│     Created: {{formatTime $mr.CreatedAt}}
+│     Updated: {{formatTime $mr.UpdatedAt}}
+│
+{{- end}}
+{{- end}}
+{{formatBoxBottom}}
+
+{{- end}}

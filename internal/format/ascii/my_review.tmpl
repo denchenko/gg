@@ -1,0 +1,41 @@
+{{- if not .MRsByProject}}
+No review workload found.
+{{- else}}
+{{- range $projectName, $mrs := .MRsByProject }}
+{{- $isCurrentProject := false}}
+{{- range $mrs }}
+{{- if .IsCurrentProject}}
+{{- $isCurrentProject = true}}
+{{- end}}
+{{- end}}
+{{- if $isCurrentProject}}
+{{formatBoxTitle (bold $projectName)}}
+{{- else}}
+{{formatBoxTitle $projectName}}
+{{- end}}
+│
+{{- $hasCurrentBranch := false}}
+{{- range $mrs }}
+{{- if .IsCurrentBranch}}
+{{- $hasCurrentBranch = true}}
+{{- end}}
+{{- end}}
+{{- range $mrs }}
+│ {{getStatusEmoji .}}{{if .IsCurrentBranch}}{{bold .Title}}{{else}}{{.Title}}{{end}}
+│   URL: {{.WebURL}}
+{{- if .Assignee}}
+│   Assignee: {{.Assignee.Username}}
+{{- end}}
+│   Reviewers: {{ if .Reviewers}}{{joinUsernames .Reviewers}}{{else}}None{{end}}
+│   Approvals: {{ if .Approvals}}{{joinUsernames .Approvals}}{{else}}None{{end}}
+│   Created: {{formatTime .CreatedAt}}
+│   Updated: {{formatTime .UpdatedAt}}
+│
+{{- if .IsCurrentBranch}}
+├──────────────────────────────────────────────────────────────────────────────────────────────────┤
+│
+{{- end}}
+{{- end}}
+{{formatBoxBottom}}
+{{- end}}
+{{- end}}

@@ -1,0 +1,47 @@
+Merge Request Analysis
+=====================
+
+MR Information:
+  Title: {{.MergeRequest.Title}}
+  URL: {{.MRURL}}
+{{- if .MergeRequest.Author}}
+  Author: {{.MergeRequest.Author.Username}}
+{{- end}}
+
+Assignee Candidates Analysis:
+{{- range .Workloads}}
+{{$workload := .}}
+{{$status := "Not selected"}}
+{{- if eq .User.ID $.SuggestedAssignee.ID}}
+{{$status = "Selected"}}
+{{- else if eq .User.ID $.MergeRequest.Author.ID}}
+{{$status = "Not selected - Author of the MR"}}
+{{- end}}
+  - {{.User.Username}} [{{$status}}] (Active MRs: {{.MRCount}}, Commits: {{.Commits}})
+{{- end}}
+
+Reviewer Candidates Analysis:
+{{- range .Workloads}}
+{{$workload := .}}
+{{$status := "Not selected"}}
+{{- if eq .User.ID $.SuggestedReviewer.ID}}
+{{$status = "Selected"}}
+{{- else if eq .User.ID $.MergeRequest.Author.ID}}
+{{$status = "Not selected - Author of the MR"}}
+{{- else if and $.SuggestedAssignee (eq .User.ID $.SuggestedAssignee.ID)}}
+{{$status = "Not selected - Selected as assignee"}}
+{{- end}}
+  - {{.User.Username}} [{{$status}}] (Active MRs: {{.MRCount}}, Commits: {{.Commits}})
+{{- end}}
+
+Final Recommendations:
+{{- if .SuggestedAssignee}}
+  Suggested Assignee: {{.SuggestedAssignee.Username}} (Active MRs: {{getWorkloadMRCount .Workloads .SuggestedAssignee.ID}}, Commits: {{getWorkloadCommits .Workloads .SuggestedAssignee.ID}})
+{{- else}}
+  Suggested Assignee: No suitable assignee found
+{{- end}}
+{{- if .SuggestedReviewer}}
+  Suggested Reviewer: {{.SuggestedReviewer.Username}} (Active MRs: {{getWorkloadMRCount .Workloads .SuggestedReviewer.ID}}, Commits: {{getWorkloadCommits .Workloads .SuggestedReviewer.ID}})
+{{- else}}
+  Suggested Reviewer: No suitable reviewer found
+{{- end}}
