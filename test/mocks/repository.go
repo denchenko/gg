@@ -18,11 +18,16 @@ func (m *MockRepository) GetProject(ctx context.Context, path string) (*domain.P
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
+
 	return args.Get(0).(*domain.Project), args.Error(1)
 }
 
 // ListMergeRequests mocks the ListMergeRequests method.
-func (m *MockRepository) ListMergeRequests(ctx context.Context, state string, scope ...string) ([]*domain.MergeRequest, error) {
+func (m *MockRepository) ListMergeRequests(
+	ctx context.Context,
+	state string,
+	scope ...string,
+) ([]*domain.MergeRequest, error) {
 	// Convert variadic to slice for mock matching
 	scopeSlice := []string{}
 	if len(scope) > 0 {
@@ -32,6 +37,7 @@ func (m *MockRepository) ListMergeRequests(ctx context.Context, state string, sc
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
+
 	return args.Get(0).([]*domain.MergeRequest), args.Error(1)
 }
 
@@ -41,6 +47,7 @@ func (m *MockRepository) GetMergeRequestApprovals(ctx context.Context, projectID
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
+
 	return args.Get(0).([]*domain.User), args.Error(1)
 }
 
@@ -50,12 +57,14 @@ func (m *MockRepository) GetMergeRequest(ctx context.Context, projectID, mrID in
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
+
 	return args.Get(0).(*domain.MergeRequest), args.Error(1)
 }
 
 // PreloadUsersByUsernames mocks the PreloadUsersByUsernames method.
 func (m *MockRepository) PreloadUsersByUsernames(ctx context.Context, usernames []string) error {
 	args := m.Called(ctx, usernames)
+
 	return args.Error(0)
 }
 
@@ -65,6 +74,7 @@ func (m *MockRepository) GetAllUsers(ctx context.Context) ([]*domain.User, error
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
+
 	return args.Get(0).([]*domain.User), args.Error(1)
 }
 
@@ -74,6 +84,7 @@ func (m *MockRepository) GetUserByUsername(ctx context.Context, username string)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
+
 	return args.Get(0).(*domain.User), args.Error(1)
 }
 
@@ -83,6 +94,7 @@ func (m *MockRepository) GetCurrentUser(ctx context.Context) (*domain.User, erro
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
+
 	return args.Get(0).(*domain.User), args.Error(1)
 }
 
@@ -92,11 +104,18 @@ func (m *MockRepository) ListCommits(ctx context.Context, projectID int) ([]*dom
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
+
 	return args.Get(0).([]*domain.Commit), args.Error(1)
 }
 
 // UpdateMergeRequest mocks the UpdateMergeRequest method.
-func (m *MockRepository) UpdateMergeRequest(ctx context.Context, projectID, mrID int, assigneeID *int, reviewerIDs []int) error {
+func (m *MockRepository) UpdateMergeRequest(
+	ctx context.Context,
+	projectID, mrID int,
+	assigneeID *int,
+	reviewerIDs []int,
+) error {
 	args := m.Called(ctx, projectID, mrID, assigneeID, reviewerIDs)
+
 	return args.Error(0)
 }

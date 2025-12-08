@@ -15,6 +15,8 @@ import (
 	do "github.com/samber/do/v2"
 )
 
+const shutdownTimeout = 10 * time.Second
+
 func main() {
 	injector := do.New(
 		config.Package,
@@ -40,10 +42,12 @@ func main() {
 
 	log.Println("Shutting down server...")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+	ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 
 	if err := server.Shutdown(ctx); err != nil {
+		cancel()
 		log.Fatalf("Server forced to shutdown: %v", err)
 	}
+
+	cancel()
 }

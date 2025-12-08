@@ -106,7 +106,7 @@ func TestNew(t *testing.T) {
 			cfg, err := New()
 
 			if tt.expectError {
-				assert.Error(t, err)
+				require.Error(t, err)
 				assert.Nil(t, cfg)
 			} else {
 				require.NoError(t, err)
@@ -125,7 +125,7 @@ func TestNewConfig(t *testing.T) {
 	// This will fail if env vars aren't set, which is expected
 	// In real usage, env vars would be set
 	if err != nil {
-		assert.Error(t, err)
+		require.Error(t, err)
 	} else {
 		assert.NotNil(t, cfg)
 	}

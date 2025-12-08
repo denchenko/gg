@@ -29,7 +29,7 @@ func MyMR(appInstance *app.App) *cobra.Command {
 	return &cobra.Command{
 		Use:   "mr",
 		Short: "Show your merge requests status",
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(_ *cobra.Command, _ []string) error {
 			return showMyMRStatus(appInstance)
 		},
 	}
@@ -39,7 +39,7 @@ func MyReview(appInstance *app.App) *cobra.Command {
 	return &cobra.Command{
 		Use:   "review",
 		Short: "Show your review workload",
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(_ *cobra.Command, _ []string) error {
 			return showMyReviewWorkload(appInstance)
 		},
 	}
@@ -52,7 +52,7 @@ func showMyReviewWorkload(appInstance *app.App) error {
 	err := log.WithSpinner("Fetching your review workload...", func() error {
 		mergeRequestsWithStatus, err := appInstance.GetMyReviewWorkloadWithStatus(ctx)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to get review workload: %w", err)
 		}
 
 		mrsWithStatus = mergeRequestsWithStatus
@@ -80,10 +80,11 @@ func showMyMRStatus(appInstance *app.App) error {
 	err := log.WithSpinner("Fetching your merge requests...", func() error {
 		mergeRequestsWithStatus, err := appInstance.GetMergeRequestsWithStatus(ctx)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to get merge requests: %w", err)
 		}
 
 		mrsWithStatus = mergeRequestsWithStatus
+
 		return nil
 	})
 	if err != nil {

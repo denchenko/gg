@@ -6,6 +6,7 @@ import (
 	"github.com/denchenko/gg/internal/config"
 	"github.com/denchenko/gg/internal/core/app"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestParseMRURL(t *testing.T) {
@@ -64,9 +65,9 @@ func TestParseMRURL(t *testing.T) {
 			projectPath, mrID, err := parseMRURL(tt.baseURL, tt.mrURL)
 
 			if tt.expectError {
-				assert.Error(t, err)
+				require.Error(t, err)
 			} else {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.Equal(t, tt.expected.projectPath, projectPath)
 				assert.Equal(t, tt.expected.mrID, mrID)
 			}

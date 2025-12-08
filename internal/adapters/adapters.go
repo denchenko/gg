@@ -31,12 +31,14 @@ func NewGitLabClient(i do.Injector) (*glclient.Client, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to create GitLab client: %w", err)
 	}
+
 	return client, nil
 }
 
 // NewGitLabRepository creates a new GitLab repository instance.
 func NewGitLabRepository(i do.Injector) (*gitlab.Repository, error) {
 	client := do.MustInvoke[*glclient.Client](i)
+
 	return gitlab.NewRepository(client), nil
 }
 
@@ -49,5 +51,6 @@ func NewRepository(i do.Injector) (app.Repository, error) {
 func NewHTTPServer(i do.Injector) (*httpadapter.Server, error) {
 	appInstance := do.MustInvoke[*app.App](i)
 	addr := ":8080"
+
 	return httpadapter.NewServer(addr, appInstance), nil
 }

@@ -67,6 +67,7 @@ linters:
     rules:
       - linters:
           - ireturn
+          - funlen
         path: _test\.go
       - linters:
           - structcheck
@@ -87,6 +88,13 @@ linters:
       - linters:
           - revive
         path: _test\.go
+      - linters:
+          - gochecknoglobals
+        path: (adapters|config|core)\.go
+        text: 'Package is a global variable'
+      - linters:
+          - wrapcheck
+        path: test/mocks
     paths:
       - third_party$
       - builtin$

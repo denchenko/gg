@@ -53,10 +53,10 @@ func TestNewApp(t *testing.T) {
 			app, err := NewApp(tt.cfg, tt.repo)
 
 			if tt.expectError {
-				assert.Error(t, err)
+				require.Error(t, err)
 				assert.Nil(t, app)
 			} else {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.NotNil(t, app)
 				assert.Equal(t, tt.cfg.TeamUsers, app.teamUsers)
 			}
@@ -80,7 +80,7 @@ func TestApp_GetProject(t *testing.T) {
 
 	project, err := app.GetProject(ctx, "group/project")
 
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, expectedProject, project)
 	repo.AssertExpectations(t)
 }
@@ -100,7 +100,7 @@ func TestApp_GetMergeRequest(t *testing.T) {
 
 	mr, err := app.GetMergeRequest(ctx, 1, 2)
 
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, expectedMR, mr)
 	repo.AssertExpectations(t)
 }
@@ -119,7 +119,7 @@ func TestApp_ListMergeRequests(t *testing.T) {
 
 	mrs, err := app.ListMergeRequests(ctx, "opened", "all")
 
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, expectedMRs, mrs)
 	repo.AssertExpectations(t)
 }
@@ -136,7 +136,7 @@ func TestApp_UpdateMergeRequest(t *testing.T) {
 
 	err := app.UpdateMergeRequest(ctx, 1, 2, &assigneeID, reviewerIDs)
 
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	repo.AssertExpectations(t)
 }
 
@@ -188,7 +188,7 @@ func TestApp_AnalyzeWorkload(t *testing.T) {
 				m.On("GetAllUsers", ctx).Return(nil, errors.New("db error"))
 			},
 			validate: func(t *testing.T, workloads []*domain.UserWorkload, err error) {
-				assert.Error(t, err)
+				require.Error(t, err)
 				assert.Nil(t, workloads)
 			},
 		},
@@ -221,7 +221,7 @@ func TestApp_AnalyzeWorkload(t *testing.T) {
 				m.On("ListCommits", ctx, 1).Return(nil, errors.New("commit error"))
 			},
 			validate: func(t *testing.T, workloads []*domain.UserWorkload, err error) {
-				assert.Error(t, err)
+				require.Error(t, err)
 				assert.Nil(t, workloads)
 			},
 		},
@@ -237,7 +237,7 @@ func TestApp_AnalyzeWorkload(t *testing.T) {
 				m.On("ListMergeRequests", ctx, "opened", []string{"all"}).Return(nil, errors.New("mr error"))
 			},
 			validate: func(t *testing.T, workloads []*domain.UserWorkload, err error) {
-				assert.Error(t, err)
+				require.Error(t, err)
 				assert.Nil(t, workloads)
 			},
 		},
@@ -308,7 +308,7 @@ func TestApp_AnalyzeActiveMRs(t *testing.T) {
 				m.On("GetMergeRequestApprovals", mock.Anything, 1, 1).Return([]*domain.User{}, nil)
 			},
 			validate: func(t *testing.T, workloads []*domain.UserWorkload, err error) {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				require.Len(t, workloads, 1)
 				assert.Equal(t, 1, workloads[0].MRCount)
 				assert.Len(t, workloads[0].ActiveMRs, 1)
@@ -321,7 +321,7 @@ func TestApp_AnalyzeActiveMRs(t *testing.T) {
 				m.On("ListMergeRequests", mock.Anything, "opened", []string{"all"}).Return(nil, errors.New("api error"))
 			},
 			validate: func(t *testing.T, workloads []*domain.UserWorkload, err error) {
-				assert.Error(t, err)
+				require.Error(t, err)
 				assert.Nil(t, workloads)
 			},
 		},
@@ -333,8 +333,8 @@ func TestApp_AnalyzeActiveMRs(t *testing.T) {
 				m.On("GetUserByUsername", mock.Anything, "user1").Return(nil, errors.New("not found"))
 			},
 			validate: func(t *testing.T, workloads []*domain.UserWorkload, err error) {
-				assert.NoError(t, err)
-				assert.Len(t, workloads, 0) // User not found, skipped
+				require.NoError(t, err)
+				assert.Empty(t, workloads) // User not found, skipped
 			},
 		},
 	}
@@ -377,7 +377,7 @@ func TestApp_AnalyzeMyReviewWorkload(t *testing.T) {
 				m.On("GetMergeRequestApprovals", mock.Anything, 1, 1).Return([]*domain.User{}, nil)
 			},
 			validate: func(t *testing.T, workload *domain.UserWorkload, err error) {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.NotNil(t, workload)
 				assert.Equal(t, 1, workload.MRCount)
 				assert.Len(t, workload.ActiveMRs, 1)
@@ -389,7 +389,7 @@ func TestApp_AnalyzeMyReviewWorkload(t *testing.T) {
 				m.On("GetCurrentUser", mock.Anything).Return(nil, errors.New("auth error"))
 			},
 			validate: func(t *testing.T, workload *domain.UserWorkload, err error) {
-				assert.Error(t, err)
+				require.Error(t, err)
 				assert.Nil(t, workload)
 			},
 		},
@@ -401,7 +401,7 @@ func TestApp_AnalyzeMyReviewWorkload(t *testing.T) {
 				m.On("ListMergeRequests", mock.Anything, "opened", []string{"all"}).Return(nil, errors.New("api error"))
 			},
 			validate: func(t *testing.T, workload *domain.UserWorkload, err error) {
-				assert.Error(t, err)
+				require.Error(t, err)
 				assert.Nil(t, workload)
 			},
 		},
@@ -449,11 +449,11 @@ func TestApp_SuggestAssigneeAndReviewer(t *testing.T) {
 				},
 			},
 			validate: func(t *testing.T, assignee, reviewer *domain.User, err error) {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.NotNil(t, assignee)
 				assert.NotNil(t, reviewer)
 				assert.NotEqual(t, assignee.ID, reviewer.ID)
-				assert.NotEqual(t, assignee.ID, 1) // Not the author
+				assert.NotEqual(t, 1, assignee.ID) // Not the author
 			},
 		},
 		{
@@ -461,7 +461,7 @@ func TestApp_SuggestAssigneeAndReviewer(t *testing.T) {
 			mr:        &domain.MergeRequest{},
 			workloads: []*domain.UserWorkload{},
 			validate: func(t *testing.T, assignee, reviewer *domain.User, err error) {
-				assert.Error(t, err)
+				require.Error(t, err)
 				assert.Nil(t, assignee)
 				assert.Nil(t, reviewer)
 			},
@@ -476,7 +476,7 @@ func TestApp_SuggestAssigneeAndReviewer(t *testing.T) {
 				},
 			},
 			validate: func(t *testing.T, assignee, reviewer *domain.User, err error) {
-				assert.Error(t, err)
+				require.Error(t, err)
 				assert.Nil(t, assignee)
 				assert.Nil(t, reviewer)
 			},
@@ -569,7 +569,7 @@ func TestApp_GetMergeRequestsWithStatus(t *testing.T) {
 	mrsWithStatus, err := app.GetMergeRequestsWithStatus(ctx)
 
 	// Should work regardless of whether GetCurrentProjectInfo succeeds or fails
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	require.Len(t, mrsWithStatus, 1)
 	assert.True(t, mrsWithStatus[0].IsStalled) // Updated 7 days ago (definitely > 3 working days)
 }
@@ -588,7 +588,7 @@ func TestApp_GetMergeRequestApprovals(t *testing.T) {
 
 	result, err := app.GetMergeRequestApprovals(ctx, 1, 2)
 
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, approvals, result)
 	repo.AssertExpectations(t)
 }
@@ -644,7 +644,7 @@ func TestApp_GetMyReviewWorkloadWithStatus(t *testing.T) {
 
 	mrsWithStatus, err := app.GetMyReviewWorkloadWithStatus(ctx)
 
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	require.Len(t, mrsWithStatus, 2) // Should exclude draft, author's own MRs, and already approved
 }
 
@@ -663,7 +663,7 @@ func TestApp_buildEmailToUserIDMap(t *testing.T) {
 
 	emailMap, err := app.buildEmailToUserIDMap(ctx)
 
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, 1, emailMap["user1@example.com"])
 	assert.Equal(t, 2, emailMap["user2@example.com"])
 	assert.NotContains(t, emailMap, "")
@@ -691,7 +691,7 @@ func TestApp_countUserCommits(t *testing.T) {
 
 	userCommits, err := app.countUserCommits(ctx, 1, emailToUserID)
 
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, 2, userCommits[1])
 	assert.Equal(t, 1, userCommits[2])
 	repo.AssertExpectations(t)
@@ -713,7 +713,7 @@ func TestApp_countUserCommits_UserNotFound(t *testing.T) {
 
 	userCommits, err := app.countUserCommits(ctx, 1, emailToUserID)
 
-	assert.NoError(t, err) // Error is ignored, commit is skipped
+	require.NoError(t, err) // Error is ignored, commit is skipped
 	assert.Empty(t, userCommits)
 	repo.AssertExpectations(t)
 }
@@ -858,13 +858,13 @@ func TestHelperFunctions(t *testing.T) {
 
 	t.Run("calculateAssigneeScore", func(t *testing.T) {
 		score := calculateAssigneeScore(10, 2)
-		assert.Equal(t, 10.0/3.0, score)
+		assert.InDelta(t, 10.0/3.0, score, 0.0001)
 
 		score = calculateAssigneeScore(0, 0)
-		assert.Equal(t, 0.0, score)
+		assert.InDelta(t, 0.0, score, 0.0001)
 
 		score = calculateAssigneeScore(5, 0)
-		assert.Equal(t, 5.0, score)
+		assert.InDelta(t, 5.0, score, 0.0001)
 	})
 
 	t.Run("subtractWorkingDays", func(t *testing.T) {
@@ -910,7 +910,7 @@ func TestApp_fetchMRApprovals(t *testing.T) {
 
 	approvalsMap, err := app.fetchMRApprovals(ctx, mrs)
 
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	require.Len(t, approvalsMap, 2)
 	assert.Len(t, approvalsMap[1], 1)
 	assert.Len(t, approvalsMap[2], 1)
@@ -930,7 +930,7 @@ func TestApp_fetchMRApprovals_Error(t *testing.T) {
 
 	approvalsMap, err := app.fetchMRApprovals(ctx, mrs)
 
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Nil(t, approvalsMap)
 	repo.AssertExpectations(t)
 }
@@ -942,7 +942,7 @@ func TestApp_fetchMRApprovals_EmptyList(t *testing.T) {
 
 	approvalsMap, err := app.fetchMRApprovals(ctx, []*domain.MergeRequest{})
 
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotNil(t, approvalsMap)
 	assert.Empty(t, approvalsMap)
 }

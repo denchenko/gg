@@ -7,9 +7,11 @@ import (
 	"github.com/briandowns/spinner"
 )
 
+const spinnerDelay = 100 * time.Millisecond
+
 // WithSpinner executes the given function while showing a spinner with the specified message.
 func WithSpinner(message string, fn func() error) error {
-	s := spinner.New(spinner.CharSets[14], 100*time.Millisecond)
+	s := spinner.New(spinner.CharSets[14], spinnerDelay)
 	s.Suffix = " " + message
 
 	err := s.Color("green")

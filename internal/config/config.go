@@ -1,7 +1,7 @@
 package config
 
 import (
-	"fmt"
+	"errors"
 	"os"
 	"strings"
 
@@ -33,12 +33,12 @@ func New() (*Config, error) {
 
 	privateToken := os.Getenv("GG_TOKEN")
 	if privateToken == "" {
-		return nil, fmt.Errorf("GG_TOKEN environment variable is required")
+		return nil, errors.New("GG_TOKEN environment variable is required")
 	}
 
 	teamUsersStr := os.Getenv("GG_TEAM")
 	if teamUsersStr == "" {
-		return nil, fmt.Errorf("GG_TEAM environment variable is required")
+		return nil, errors.New("GG_TEAM environment variable is required")
 	}
 
 	teamUsers := strings.Split(teamUsersStr, ",")

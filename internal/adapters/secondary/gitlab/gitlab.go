@@ -10,6 +10,8 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+const perPageLimit = 100
+
 // Repository implements the app.Repository interface for GitLab.
 type Repository struct {
 	client        *gitlab.Client
@@ -35,7 +37,7 @@ func (r *Repository) PreloadUsersByUsernames(ctx context.Context, usernames []st
 
 	users, _, err := r.client.Users.ListUsers(&gitlab.ListUsersOptions{
 		ListOptions: gitlab.ListOptions{
-			PerPage: 100,
+			PerPage: perPageLimit,
 		},
 		Active: pointerOf(true),
 		Humans: pointerOf(true),
@@ -60,12 +62,17 @@ func (r *Repository) PreloadUsersByUsernames(ctx context.Context, usernames []st
 				}
 				r.userCache.Store(user.ID, domainUser)
 				r.usernameCache.Store(user.Username, domainUser)
+
 				return nil
 			})
 		}
 	}
 
-	return errg.Wait()
+	if err := errg.Wait(); err != nil {
+		return fmt.Errorf("failed to preload users: %w", err)
+	}
+
+	return nil
 }
 
 // getUserStatus gets a user's status from GitLab.
@@ -74,6 +81,7 @@ func (r *Repository) getUserStatus(_ context.Context, userID int) (domain.UserSt
 	if err != nil {
 		return domain.UserStatus{}, fmt.Errorf("failed to get user status: %w", err)
 	}
+
 	return domain.UserStatus{
 		Message:      status.Message,
 		Availability: string(status.Availability),
@@ -108,7 +116,7 @@ func (r *Repository) getUserFromCacheOrFetch(ctx context.Context, userID int) (*
 }
 
 // GetUserByUsername gets a user by username from cache or fetches from API.
-func (r *Repository) GetUserByUsername(ctx context.Context, username string) (*domain.User, error) {
+func (r *Repository) GetUserByUsername(_ context.Context, username string) (*domain.User, error) {
 	if cached, ok := r.usernameCache.Load(username); ok {
 		return cached.(*domain.User), nil
 	}
@@ -153,6 +161,7 @@ func (r *Repository) batchGetUsers(ctx context.Context, userIDs []int) (map[int]
 			user, err := r.getUserFromCacheOrFetch(ctx, id)
 			if err != nil {
 				errChan <- err
+
 				return
 			}
 			mu.Lock()
@@ -172,11 +181,12 @@ func (r *Repository) batchGetUsers(ctx context.Context, userIDs []int) (map[int]
 }
 
 // GetProject retrieves a project by path.
-func (r *Repository) GetProject(ctx context.Context, path string) (*domain.Project, error) {
+func (r *Repository) GetProject(_ context.Context, path string) (*domain.Project, error) {
 	project, _, err := r.client.Projects.GetProject(path, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get project: %w", err)
 	}
+
 	return &domain.Project{
 		ID:   project.ID,
 		Path: project.Path,
@@ -236,10 +246,14 @@ func (r *Repository) GetMergeRequest(ctx context.Context, projectID, mrID int) (
 }
 
 // ListMergeRequests lists merge requests with the given state and scope.
-func (r *Repository) ListMergeRequests(ctx context.Context, state string, scope ...string) ([]*domain.MergeRequest, error) {
+func (r *Repository) ListMergeRequests(
+	ctx context.Context,
+	state string,
+	scope ...string,
+) ([]*domain.MergeRequest, error) {
 	opts := &gitlab.ListMergeRequestsOptions{
 		ListOptions: gitlab.ListOptions{
-			PerPage: 100,
+			PerPage: perPageLimit,
 		},
 		State: &state,
 	}
@@ -272,6 +286,118 @@ func (r *Repository) ListMergeRequests(ctx context.Context, state string, scope 
 		return nil, fmt.Errorf("failed to get users: %w", err)
 	}
 
+	return r.convertToDomainMRs(mrs, users), nil
+}
+
+// GetMergeRequestApprovals retrieves approvals for a merge request.
+func (r *Repository) GetMergeRequestApprovals(ctx context.Context, projectID, mrID int) ([]*domain.User, error) {
+	approvals, _, err := r.client.MergeRequests.GetMergeRequestApprovals(projectID, mrID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get merge request approvals: %w", err)
+	}
+
+	users := make([]*domain.User, 0, len(approvals.ApprovedBy))
+	for _, approval := range approvals.ApprovedBy {
+		user, err := r.getUserFromCacheOrFetch(ctx, approval.User.ID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get approval user: %w", err)
+		}
+		users = append(users, user)
+	}
+
+	return users, nil
+}
+
+// GetUser retrieves a user by ID (not part of Repository interface but used internally).
+func (r *Repository) GetUser(ctx context.Context, userID int) (*domain.User, error) {
+	user, _, err := r.client.Users.GetUser(userID, gitlab.GetUsersOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get user: %w", err)
+	}
+
+	domainUser := &domain.User{
+		ID:       user.ID,
+		Username: user.Username,
+		Email:    user.Email,
+	}
+
+	domainUser.Status, err = r.getUserStatus(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get user status: %w", err)
+	}
+
+	return domainUser, nil
+}
+
+// GetAllUsers retrieves all cached users.
+func (r *Repository) GetAllUsers(_ context.Context) ([]*domain.User, error) {
+	var users []*domain.User
+	r.userCache.Range(func(_ any, value any) bool {
+		if user, ok := value.(*domain.User); ok {
+			users = append(users, user)
+		}
+
+		return true
+	})
+
+	return users, nil
+}
+
+// ListCommits lists commits for a project.
+func (r *Repository) ListCommits(_ context.Context, projectID int) ([]*domain.Commit, error) {
+	commits, _, err := r.client.Commits.ListCommits(projectID, &gitlab.ListCommitsOptions{
+		ListOptions: gitlab.ListOptions{
+			PerPage: perPageLimit,
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list commits: %w", err)
+	}
+
+	result := make([]*domain.Commit, 0, len(commits))
+	for _, commit := range commits {
+		result = append(result, &domain.Commit{
+			ID:          commit.ID,
+			AuthorName:  commit.AuthorName,
+			AuthorEmail: commit.AuthorEmail,
+			CreatedAt:   *commit.CreatedAt,
+			Message:     commit.Message,
+			WebURL:      commit.WebURL,
+		})
+	}
+
+	return result, nil
+}
+
+// UpdateMergeRequest updates the assignee and reviewer for a merge request.
+func (r *Repository) UpdateMergeRequest(
+	_ context.Context,
+	projectID, mrID int,
+	assigneeID *int,
+	reviewerIDs []int,
+) error {
+	opts := &gitlab.UpdateMergeRequestOptions{}
+
+	if assigneeID != nil {
+		opts.AssigneeID = assigneeID
+	}
+
+	if len(reviewerIDs) > 0 {
+		opts.ReviewerIDs = &reviewerIDs
+	}
+
+	_, _, err := r.client.MergeRequests.UpdateMergeRequest(projectID, mrID, opts)
+	if err != nil {
+		return fmt.Errorf("failed to update merge request: %w", err)
+	}
+
+	return nil
+}
+
+func (r *Repository) convertToDomainMRs(
+	mrs []*gitlab.BasicMergeRequest,
+	users map[int]*domain.User,
+) []*domain.MergeRequest {
 	domainMRs := make([]*domain.MergeRequest, 0, len(mrs))
 	for _, mr := range mrs {
 		reviewers := make([]*domain.User, 0, len(mr.Reviewers))
@@ -306,102 +432,7 @@ func (r *Repository) ListMergeRequests(ctx context.Context, state string, scope 
 		domainMRs = append(domainMRs, domainMR)
 	}
 
-	return domainMRs, nil
-}
-
-// GetMergeRequestApprovals retrieves approvals for a merge request.
-func (r *Repository) GetMergeRequestApprovals(ctx context.Context, projectID, mrID int) ([]*domain.User, error) {
-	approvals, _, err := r.client.MergeRequests.GetMergeRequestApprovals(projectID, mrID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get merge request approvals: %w", err)
-	}
-
-	users := make([]*domain.User, 0, len(approvals.ApprovedBy))
-	for _, approval := range approvals.ApprovedBy {
-		user, err := r.getUserFromCacheOrFetch(ctx, approval.User.ID)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get approval user: %w", err)
-		}
-		users = append(users, user)
-	}
-	return users, nil
-}
-
-// GetUser retrieves a user by ID (not part of Repository interface but used internally).
-func (r *Repository) GetUser(ctx context.Context, userID int) (*domain.User, error) {
-	user, _, err := r.client.Users.GetUser(userID, gitlab.GetUsersOptions{})
-	if err != nil {
-		return nil, fmt.Errorf("failed to get user: %w", err)
-	}
-
-	domainUser := &domain.User{
-		ID:       user.ID,
-		Username: user.Username,
-		Email:    user.Email,
-	}
-
-	domainUser.Status, err = r.getUserStatus(ctx, userID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get user status: %w", err)
-	}
-
-	return domainUser, nil
-}
-
-// GetAllUsers retrieves all cached users.
-func (r *Repository) GetAllUsers(ctx context.Context) ([]*domain.User, error) {
-	var users []*domain.User
-	r.userCache.Range(func(key, value any) bool {
-		if user, ok := value.(*domain.User); ok {
-			users = append(users, user)
-		}
-		return true
-	})
-	return users, nil
-}
-
-// ListCommits lists commits for a project.
-func (r *Repository) ListCommits(ctx context.Context, projectID int) ([]*domain.Commit, error) {
-	commits, _, err := r.client.Commits.ListCommits(projectID, &gitlab.ListCommitsOptions{
-		ListOptions: gitlab.ListOptions{
-			PerPage: 100,
-		},
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to list commits: %w", err)
-	}
-
-	result := make([]*domain.Commit, 0, len(commits))
-	for _, commit := range commits {
-		result = append(result, &domain.Commit{
-			ID:          commit.ID,
-			AuthorName:  commit.AuthorName,
-			AuthorEmail: commit.AuthorEmail,
-			CreatedAt:   *commit.CreatedAt,
-			Message:     commit.Message,
-			WebURL:      commit.WebURL,
-		})
-	}
-	return result, nil
-}
-
-// UpdateMergeRequest updates the assignee and reviewer for a merge request.
-func (r *Repository) UpdateMergeRequest(ctx context.Context, projectID, mrID int, assigneeID *int, reviewerIDs []int) error {
-	opts := &gitlab.UpdateMergeRequestOptions{}
-
-	if assigneeID != nil {
-		opts.AssigneeID = assigneeID
-	}
-
-	if len(reviewerIDs) > 0 {
-		opts.ReviewerIDs = &reviewerIDs
-	}
-
-	_, _, err := r.client.MergeRequests.UpdateMergeRequest(projectID, mrID, opts)
-	if err != nil {
-		return fmt.Errorf("failed to update merge request: %w", err)
-	}
-	return nil
+	return domainMRs
 }
 
 func pointerOf(v bool) *bool {

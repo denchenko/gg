@@ -1,6 +1,8 @@
 package core
 
 import (
+	"fmt"
+
 	"github.com/denchenko/gg/internal/config"
 	"github.com/denchenko/gg/internal/core/app"
 	do "github.com/samber/do/v2"
@@ -14,5 +16,11 @@ var Package = do.Package(
 func NewApp(i do.Injector) (*app.App, error) {
 	cfg := do.MustInvoke[*config.Config](i)
 	repo := do.MustInvoke[app.Repository](i)
-	return app.NewApp(cfg, repo)
+
+	appInstance, err := app.NewApp(cfg, repo)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create app: %w", err)
+	}
+
+	return appInstance, nil
 }

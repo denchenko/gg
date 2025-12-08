@@ -1,6 +1,6 @@
 module github.com/denchenko/gg
 
-go 1.23.10
+go 1.24.9
 
 require (
 	github.com/briandowns/spinner v1.23.2

@@ -26,22 +26,26 @@ type WebhookPayload struct {
 func (s *Server) handleGitLabWebhook(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+
 		return
 	}
 
 	var payload WebhookPayload
 	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
+
 		return
 	}
 
 	if payload.ObjectKind != "merge_request" {
 		w.WriteHeader(http.StatusOK)
+
 		return
 	}
 
 	if payload.ObjectAttributes.WorkInProgress || payload.ObjectAttributes.AssigneeID != 0 {
 		w.WriteHeader(http.StatusOK)
+
 		return
 	}
 
@@ -49,6 +53,7 @@ func (s *Server) handleGitLabWebhook(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Printf("Failed to get merge request: %v", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
+
 		return
 	}
 
@@ -56,6 +61,7 @@ func (s *Server) handleGitLabWebhook(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Printf("Failed to analyze workload: %v", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
+
 		return
 	}
 
@@ -63,12 +69,14 @@ func (s *Server) handleGitLabWebhook(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Printf("Failed to suggest assignee and reviewer: %v", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
+
 		return
 	}
 
 	if err := s.app.UpdateMergeRequest(r.Context(), mr.ProjectID, mr.IID, &assignee.ID, []int{reviewer.ID}); err != nil {
 		log.Printf("Failed to update merge request: %v", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
+
 		return
 	}
 

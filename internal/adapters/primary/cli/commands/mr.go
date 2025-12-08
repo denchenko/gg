@@ -2,6 +2,7 @@ package commands
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -25,7 +26,7 @@ func MR(cfg *config.Config, appInstance *app.App) *cobra.Command {
 		Long: `Analyze team review workload and suggest appropriate assignee and reviewer for a merge request.
 If MR_URL is not provided, it will try to get the current merge request URL from git.`,
 		Args: cobra.MaximumNArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(_ *cobra.Command, args []string) error {
 			var mrURL string
 			if len(args) > 0 {
 				mrURL = args[0]
@@ -36,59 +37,40 @@ If MR_URL is not provided, it will try to get the current merge request URL from
 					return fmt.Errorf("failed to get current MR URL: %w", err)
 				}
 			}
+
 			return suggestAssignees(cfg, appInstance, mrURL)
 		},
 	})
+
 	return cmd
 }
 
 func suggestAssignees(cfg *config.Config, appInstance *app.App, mrURL string) error {
 	ctx := context.Background()
 
-	// TODO: common parse
 	projectPath, mrID, err := parseMRURL(cfg.BaseURL, mrURL)
 	if err != nil {
 		return fmt.Errorf("failed to parse merge request URL: %w", err)
 	}
 
-	var project *domain.Project
-	err = log.WithSpinner("Fetching project information...", func() error {
-		var err error
-		project, err = appInstance.GetProject(ctx, projectPath)
-		return err
-	})
+	project, err := fetchProject(ctx, appInstance, projectPath)
 	if err != nil {
-		return fmt.Errorf("failed to get project: %w", err)
+		return err
 	}
 
-	var mr *domain.MergeRequest
-	err = log.WithSpinner("Fetching merge request details...", func() error {
-		var err error
-		mr, err = appInstance.GetMergeRequest(ctx, project.ID, mrID)
-		return err
-	})
+	mr, err := fetchMergeRequest(ctx, appInstance, project.ID, mrID)
 	if err != nil {
-		return fmt.Errorf("failed to get merge request: %w", err)
+		return err
 	}
 
-	var workloads []*domain.UserWorkload
-	err = log.WithSpinner("Analyzing team workload...", func() error {
-		var err error
-		workloads, err = appInstance.AnalyzeWorkload(ctx, project.ID)
-		return err
-	})
+	workloads, err := fetchWorkloads(ctx, appInstance, project.ID)
 	if err != nil {
-		return fmt.Errorf("failed to analyze workload: %w", err)
+		return err
 	}
 
-	var suggestedAssignee, suggestedReviewer *domain.User
-	err = log.WithSpinner("Calculating suggestions...", func() error {
-		var err error
-		suggestedAssignee, suggestedReviewer, err = appInstance.SuggestAssigneeAndReviewer(ctx, mr, workloads)
-		return err
-	})
+	suggestedAssignee, suggestedReviewer, err := fetchSuggestions(ctx, appInstance, mr, workloads)
 	if err != nil {
-		return fmt.Errorf("failed to get suggestions: %w", err)
+		return err
 	}
 
 	formatted, err := ascii.FormatMRRoulette(mr, mrURL, workloads, suggestedAssignee, suggestedReviewer)
@@ -105,7 +87,89 @@ func suggestAssignees(cfg *config.Config, appInstance *app.App, mrURL string) er
 	return nil
 }
 
-func applySuggestions(ctx context.Context, appInstance *app.App, projectID, mrID int, suggestedAssignee, suggestedReviewer *domain.User) error {
+func fetchProject(ctx context.Context, appInstance *app.App, projectPath string) (*domain.Project, error) {
+	var project *domain.Project
+	err := log.WithSpinner("Fetching project information...", func() error {
+		var err error
+		project, err = appInstance.GetProject(ctx, projectPath)
+		if err != nil {
+			return fmt.Errorf("failed to get project: %w", err)
+		}
+
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get project: %w", err)
+	}
+
+	return project, nil
+}
+
+func fetchMergeRequest(ctx context.Context, appInstance *app.App, projectID, mrID int) (*domain.MergeRequest, error) {
+	var mr *domain.MergeRequest
+	err := log.WithSpinner("Fetching merge request details...", func() error {
+		var err error
+		mr, err = appInstance.GetMergeRequest(ctx, projectID, mrID)
+		if err != nil {
+			return fmt.Errorf("failed to get merge request: %w", err)
+		}
+
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get merge request: %w", err)
+	}
+
+	return mr, nil
+}
+
+func fetchWorkloads(ctx context.Context, appInstance *app.App, projectID int) ([]*domain.UserWorkload, error) {
+	var workloads []*domain.UserWorkload
+	err := log.WithSpinner("Analyzing team workload...", func() error {
+		var err error
+		workloads, err = appInstance.AnalyzeWorkload(ctx, projectID)
+		if err != nil {
+			return fmt.Errorf("failed to analyze workload: %w", err)
+		}
+
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to analyze workload: %w", err)
+	}
+
+	return workloads, nil
+}
+
+func fetchSuggestions(
+	ctx context.Context,
+	appInstance *app.App,
+	mr *domain.MergeRequest,
+	workloads []*domain.UserWorkload,
+) (*domain.User, *domain.User, error) {
+	var suggestedAssignee, suggestedReviewer *domain.User
+	err := log.WithSpinner("Calculating suggestions...", func() error {
+		var err error
+		suggestedAssignee, suggestedReviewer, err = appInstance.SuggestAssigneeAndReviewer(ctx, mr, workloads)
+		if err != nil {
+			return fmt.Errorf("failed to get suggestions: %w", err)
+		}
+
+		return nil
+	})
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to get suggestions: %w", err)
+	}
+
+	return suggestedAssignee, suggestedReviewer, nil
+}
+
+func applySuggestions(
+	ctx context.Context,
+	appInstance *app.App,
+	projectID, mrID int,
+	suggestedAssignee, suggestedReviewer *domain.User,
+) error {
 	fmt.Printf("\nWould you like to apply these suggestions to the merge request? [y/N]: ")
 	var response string
 	if _, err := fmt.Scanln(&response); err != nil && err.Error() != "unexpected newline" {
@@ -141,10 +205,12 @@ func applySuggestions(ctx context.Context, appInstance *app.App, projectID, mrID
 	return nil
 }
 
+const urlPartsCount = 2
+
 func parseMRURL(baseURL, mrURL string) (projectPath string, mrID int, err error) {
 	parts := strings.Split(mrURL, "/-/merge_requests/")
-	if len(parts) != 2 {
-		return "", 0, fmt.Errorf("invalid merge request URL format")
+	if len(parts) != urlPartsCount {
+		return "", 0, errors.New("invalid merge request URL format")
 	}
 
 	projectPath = strings.TrimPrefix(parts[0], baseURL+"/")
