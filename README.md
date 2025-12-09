@@ -7,16 +7,11 @@ A CLI tool for managing GitLab merge requests with intelligent workload analysis
 
 ## Configuration
 
+Environment:
 - `GG_TOKEN` (required) - Your GitLab personal access token with `api` scope
 - `GG_TEAM` (required) - Comma-separated list of team member usernames (e.g., `user1,user2,user3`)
 - `GG_BASE_URL` (optional) - GitLab instance URL (defaults to `https://gitlab.com`)
-
-Example:
-```bash
-export GG_TOKEN="your-gitlab-token"
-export GG_TEAM="alice,bob,charlie"
-export GG_BASE_URL="https://gitlab.com"  # Optional, defaults to gitlab.com
-```
+- `GG_WEBHOOK_ADDRESS` (optional) - Web Hook listen address (defaults to `:8080`)
 
 ## Usage
 
@@ -42,13 +37,6 @@ go install github.com/denchenko/gg/cmd/hook@latest
 ```
 
 The webhook server automatically assigns assignees and reviewers to merge requests when they are opened (excluding draft MRs and those already assigned).
-
-**Running the server:**
-```bash
-export GG_TOKEN="your-gitlab-token"
-export GG_TEAM="alice,bob,charlie"
-./bin/hook
-```
 
 The server will start on port `8080` by default and listen for webhooks at `/gitlab/hook`.
 

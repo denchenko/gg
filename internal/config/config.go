@@ -14,9 +14,10 @@ var Package = do.Package(
 
 // Config holds the application configuration.
 type Config struct {
-	BaseURL   string
-	Token     string
-	TeamUsers []string
+	BaseURL        string
+	Token          string
+	TeamUsers      []string
+	WebhookAddress string
 }
 
 // NewConfig creates a new configuration from environment variables (for DI).
@@ -29,6 +30,11 @@ func New() (*Config, error) {
 	gitServiceURL := os.Getenv("GG_BASE_URL")
 	if gitServiceURL == "" {
 		gitServiceURL = "https://gitlab.com"
+	}
+
+	webhookAddress := os.Getenv("GG_WEBHOOK_ADDRESS")
+	if webhookAddress == "" {
+		webhookAddress = ":8080"
 	}
 
 	privateToken := os.Getenv("GG_TOKEN")
@@ -47,8 +53,9 @@ func New() (*Config, error) {
 	}
 
 	return &Config{
-		BaseURL:   gitServiceURL,
-		Token:     privateToken,
-		TeamUsers: teamUsers,
+		BaseURL:        gitServiceURL,
+		Token:          privateToken,
+		TeamUsers:      teamUsers,
+		WebhookAddress: webhookAddress,
 	}, nil
 }

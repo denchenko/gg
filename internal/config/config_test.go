@@ -13,6 +13,7 @@ func TestNew(t *testing.T) {
 	originalToken := os.Getenv("GG_TOKEN")
 	originalTeam := os.Getenv("GG_TEAM")
 	originalBaseURL := os.Getenv("GG_BASE_URL")
+	originalWebhookAddr := os.Getenv("GG_WEBHOOK_ADDRESS")
 
 	// Clean up after test
 	defer func() {
@@ -31,6 +32,11 @@ func TestNew(t *testing.T) {
 		} else {
 			_ = os.Unsetenv("GG_BASE_URL")
 		}
+		if originalWebhookAddr != "" {
+			_ = os.Setenv("GG_WEBHOOK_ADDRESS", originalWebhookAddr)
+		} else {
+			_ = os.Unsetenv("GG_WEBHOOK_ADDRESS")
+		}
 	}()
 
 	tests := []struct {
@@ -45,12 +51,14 @@ func TestNew(t *testing.T) {
 				_ = os.Setenv("GG_TOKEN", "test-token")
 				_ = os.Setenv("GG_TEAM", "user1,user2,user3")
 				_ = os.Unsetenv("GG_BASE_URL")
+				_ = os.Unsetenv("GG_WEBHOOK_ADDRESS")
 			},
 			expectError: false,
 			validate: func(t *testing.T, cfg *Config) {
 				assert.Equal(t, "test-token", cfg.Token)
 				assert.Equal(t, "https://gitlab.com", cfg.BaseURL)
 				assert.Equal(t, []string{"user1", "user2", "user3"}, cfg.TeamUsers)
+				assert.Equal(t, ":8080", cfg.WebhookAddress)
 			},
 		},
 		{
@@ -59,10 +67,23 @@ func TestNew(t *testing.T) {
 				_ = os.Setenv("GG_TOKEN", "test-token")
 				_ = os.Setenv("GG_TEAM", "user1")
 				_ = os.Setenv("GG_BASE_URL", "https://gitlab.example.com")
+				_ = os.Unsetenv("GG_WEBHOOK_ADDRESS")
 			},
 			expectError: false,
 			validate: func(t *testing.T, cfg *Config) {
 				assert.Equal(t, "https://gitlab.example.com", cfg.BaseURL)
+			},
+		},
+		{
+			name: "custom webhook address",
+			setupEnv: func() {
+				_ = os.Setenv("GG_TOKEN", "test-token")
+				_ = os.Setenv("GG_TEAM", "user1")
+				_ = os.Setenv("GG_WEBHOOK_ADDRESS", "0.0.0.0:9090")
+			},
+			expectError: false,
+			validate: func(t *testing.T, cfg *Config) {
+				assert.Equal(t, "0.0.0.0:9090", cfg.WebhookAddress)
 			},
 		},
 		{
@@ -100,6 +121,7 @@ func TestNew(t *testing.T) {
 			_ = os.Unsetenv("GG_TOKEN")
 			_ = os.Unsetenv("GG_TEAM")
 			_ = os.Unsetenv("GG_BASE_URL")
+			_ = os.Unsetenv("GG_WEBHOOK_ADDRESS")
 
 			tt.setupEnv()
 

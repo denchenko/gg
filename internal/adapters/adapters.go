@@ -62,7 +62,7 @@ func NewRepository(i do.Injector) (app.Repository, error) {
 // NewHTTPServer creates a new HTTP server.
 func NewHTTPServer(i do.Injector) (*httpadapter.Server, error) {
 	appInstance := do.MustInvoke[*app.App](i)
-	addr := ":8080"
+	cfg := do.MustInvoke[*config.Config](i)
 
-	return httpadapter.NewServer(addr, appInstance), nil
+	return httpadapter.NewServer(cfg.WebhookAddress, appInstance), nil
 }
