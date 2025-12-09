@@ -5,6 +5,50 @@
 
 A CLI tool for managing GitLab merge requests with intelligent workload analysis and automatic assignment suggestions.
 
+```
+∙ gg my mr
+Fetching your merge requests... [done]
+4 total, 1 ready-to-merge, 2 stalled
+┌─ denchenko/example-repository-1 ──────────────────────────────────────────────────┐
+│
+│ ISSUE-1 | mvp
+│   URL: https://gitlab.com/denchenko/example-repository-1/-/merge_requests/65
+│   Assignee: bob
+│   Reviewers: None
+│   Approvals: None
+│   Created: 2025-12-04 12:36:17
+│   Updated: 2025-12-05 15:02:32
+│
+│ [ready-to-merge] ISSUE-2 | fixes
+│   URL: https://gitlab.com/denchenko/example-repository-1/-/merge_requests/66
+│   Assignee: alice
+│   Reviewers: None
+│   Approvals: alice
+│   Created: 2025-12-05 10:52:28
+│   Updated: 2025-12-05 10:52:32
+│
+│ [stalled] ISSUE-3 | test
+│   URL: https://gitlab.com/denchenko/example-repository-1/-/merge_requests/67
+│   Assignee: alice
+│   Reviewers: None
+│   Approvals: None
+│   Created: 2025-11-13 14:40:04
+│   Updated: 2025-11-14 09:23:22
+│
+└───────────────────────────────────────────────────────────────────────────────────┘
+┌─ denchenko/example-repository-2 ──────────────────────────────────────────────────┐
+│
+│ [stalled] Draft: ISSUE-4 | new feature
+│   URL: https://gitlab.com/denchenko/example-repository-2/-/merge_requests/68
+│   Assignee: bob
+│   Reviewers: None
+│   Approvals: None
+│   Created: 2025-08-26 15:31:28
+│   Updated: 2025-08-27 16:31:52
+│
+└───────────────────────────────────────────────────────────────────────────────────┘
+```
+
 ## Configuration
 
 Environment:
