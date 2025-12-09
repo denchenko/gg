@@ -13,6 +13,8 @@ Environment:
 - `GG_BASE_URL` (optional) - GitLab instance URL (defaults to `https://gitlab.com`)
 - `GG_WEBHOOK_ADDRESS` (optional) - Web Hook listen address (defaults to `:8080`)
 
+The current project, branch, and merge request can be infered from the Git repository you run it in, so most commands work without manually passing these identifiers.
+
 ## Usage
 
 ### CLI
