@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/denchenko/gg/internal/adapters/secondary/repository/mocks"
 	"github.com/denchenko/gg/internal/config"
 	"github.com/denchenko/gg/internal/core/domain"
-	"github.com/denchenko/gg/test/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"

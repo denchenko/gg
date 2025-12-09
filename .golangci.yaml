@@ -94,7 +94,7 @@ linters:
         text: 'Package is a global variable'
       - linters:
           - wrapcheck
-        path: test/mocks
+        path: .*mocks
     paths:
       - third_party$
       - builtin$
