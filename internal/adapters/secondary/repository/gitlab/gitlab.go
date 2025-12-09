@@ -14,22 +14,23 @@ const perPageLimit = 100
 
 // Repository implements the app.Repository interface for GitLab.
 type Repository struct {
-	client        *gitlab.Client
-	userCache     sync.Map // map[int]*domain.User
-	usernameCache sync.Map // map[string]*domain.User
+	client *gitlab.Client
 }
 
 // NewRepository creates a new GitLab repository instance.
 func NewRepository(client *gitlab.Client) *Repository {
 	return &Repository{
-		client:        client,
-		userCache:     sync.Map{},
-		usernameCache: sync.Map{},
+		client: client,
 	}
 }
 
-// PreloadUsersByUsernames loads users by their usernames and caches them.
-func (r *Repository) PreloadUsersByUsernames(ctx context.Context, usernames []string) error {
+// PreloadUsersByUsernames loads users by their usernames.
+func (r *Repository) PreloadUsersByUsernames(_ context.Context, _ []string) error {
+	return nil
+}
+
+// FetchUsersByUsernames fetches users by their usernames from the GitLab API.
+func (r *Repository) FetchUsersByUsernames(ctx context.Context, usernames []string) ([]*domain.User, error) {
 	usernameMap := make(map[string]struct{}, len(usernames))
 	for _, username := range usernames {
 		usernameMap[username] = struct{}{}
@@ -43,13 +44,16 @@ func (r *Repository) PreloadUsersByUsernames(ctx context.Context, usernames []st
 		Humans: pointerOf(true),
 	})
 	if err != nil {
-		return fmt.Errorf("failed to get users: %w", err)
+		return nil, fmt.Errorf("failed to get users: %w", err)
 	}
 
 	var errg errgroup.Group
+	var mu sync.Mutex
+	domainUsers := make([]*domain.User, 0, len(usernames))
 
 	for _, user := range users {
 		if _, ok := usernameMap[user.Username]; ok {
+			user := user // capture loop variable
 			errg.Go(func() error {
 				domainUser := &domain.User{
 					ID:       user.ID,
@@ -60,8 +64,9 @@ func (r *Repository) PreloadUsersByUsernames(ctx context.Context, usernames []st
 				if err != nil {
 					return fmt.Errorf("failed to get user status: %w", err)
 				}
-				r.userCache.Store(user.ID, domainUser)
-				r.usernameCache.Store(user.Username, domainUser)
+				mu.Lock()
+				domainUsers = append(domainUsers, domainUser)
+				mu.Unlock()
 
 				return nil
 			})
@@ -69,10 +74,10 @@ func (r *Repository) PreloadUsersByUsernames(ctx context.Context, usernames []st
 	}
 
 	if err := errg.Wait(); err != nil {
-		return fmt.Errorf("failed to preload users: %w", err)
+		return nil, fmt.Errorf("failed to fetch users: %w", err)
 	}
 
-	return nil
+	return domainUsers, nil
 }
 
 // getUserStatus gets a user's status from GitLab.
@@ -88,11 +93,8 @@ func (r *Repository) getUserStatus(_ context.Context, userID int) (domain.UserSt
 	}, nil
 }
 
-func (r *Repository) getUserFromCacheOrFetch(ctx context.Context, userID int) (*domain.User, error) {
-	if cached, ok := r.userCache.Load(userID); ok {
-		return cached.(*domain.User), nil
-	}
-
+// getUser fetches a user by ID from the GitLab API.
+func (r *Repository) getUser(ctx context.Context, userID int) (*domain.User, error) {
 	user, _, err := r.client.Users.GetUser(userID, gitlab.GetUsersOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get user: %w", err)
@@ -109,19 +111,12 @@ func (r *Repository) getUserFromCacheOrFetch(ctx context.Context, userID int) (*
 		return nil, fmt.Errorf("failed to get user status: %w", err)
 	}
 
-	r.userCache.Store(user.ID, domainUser)
-	r.usernameCache.Store(user.Username, domainUser)
-
 	return domainUser, nil
 }
 
-// GetUserByUsername gets a user by username from cache or fetches from API.
+// GetUserByUsername gets a user by username.
 func (r *Repository) GetUserByUsername(_ context.Context, username string) (*domain.User, error) {
-	if cached, ok := r.usernameCache.Load(username); ok {
-		return cached.(*domain.User), nil
-	}
-
-	return nil, fmt.Errorf("user not found: %s", username)
+	return nil, fmt.Errorf("user not found: %s (GitLab API doesn't support fetching by username)", username)
 }
 
 // GetCurrentUser gets the current authenticated user.
@@ -142,9 +137,6 @@ func (r *Repository) GetCurrentUser(ctx context.Context) (*domain.User, error) {
 		return nil, fmt.Errorf("failed to get user status: %w", err)
 	}
 
-	r.userCache.Store(user.ID, domainUser)
-	r.usernameCache.Store(user.Username, domainUser)
-
 	return domainUser, nil
 }
 
@@ -158,7 +150,7 @@ func (r *Repository) batchGetUsers(ctx context.Context, userIDs []int) (map[int]
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()
-			user, err := r.getUserFromCacheOrFetch(ctx, id)
+			user, err := r.getUser(ctx, id)
 			if err != nil {
 				errChan <- err
 
@@ -298,7 +290,7 @@ func (r *Repository) GetMergeRequestApprovals(ctx context.Context, projectID, mr
 
 	users := make([]*domain.User, 0, len(approvals.ApprovedBy))
 	for _, approval := range approvals.ApprovedBy {
-		user, err := r.getUserFromCacheOrFetch(ctx, approval.User.ID)
+		user, err := r.getUser(ctx, approval.User.ID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get approval user: %w", err)
 		}
@@ -329,18 +321,9 @@ func (r *Repository) GetUser(ctx context.Context, userID int) (*domain.User, err
 	return domainUser, nil
 }
 
-// GetAllUsers retrieves all cached users.
+// GetAllUsers retrieves all users.
 func (r *Repository) GetAllUsers(_ context.Context) ([]*domain.User, error) {
-	var users []*domain.User
-	r.userCache.Range(func(_ any, value any) bool {
-		if user, ok := value.(*domain.User); ok {
-			users = append(users, user)
-		}
-
-		return true
-	})
-
-	return users, nil
+	return []*domain.User{}, nil
 }
 
 // ListCommits lists commits for a project.

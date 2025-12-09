@@ -5,7 +5,9 @@ import (
 
 	"github.com/denchenko/gg/internal/adapters/primary/cli"
 	httpadapter "github.com/denchenko/gg/internal/adapters/primary/http"
-	"github.com/denchenko/gg/internal/adapters/secondary/gitlab"
+	"github.com/denchenko/gg/internal/adapters/secondary/cache"
+	"github.com/denchenko/gg/internal/adapters/secondary/repository/cached"
+	"github.com/denchenko/gg/internal/adapters/secondary/repository/gitlab"
 	"github.com/denchenko/gg/internal/config"
 	"github.com/denchenko/gg/internal/core/app"
 	do "github.com/samber/do/v2"
@@ -21,6 +23,7 @@ var PrimaryPackage = do.Package(
 var SecondaryPackage = do.Package(
 	do.Lazy[*glclient.Client](NewGitLabClient),
 	do.Lazy[*gitlab.Repository](NewGitLabRepository),
+	do.Lazy[cache.Cache](NewCache),
 	do.Lazy[app.Repository](NewRepository),
 )
 
@@ -42,9 +45,18 @@ func NewGitLabRepository(i do.Injector) (*gitlab.Repository, error) {
 	return gitlab.NewRepository(client), nil
 }
 
+// NewCache creates a new cache instance.
+func NewCache(_ do.Injector) (cache.Cache, error) {
+	return cache.NewInMemoryCache(), nil
+}
+
 // NewRepository creates a repository adapter that implements app.Repository.
+// It wraps the GitLab repository with a cached repository for performance.
 func NewRepository(i do.Injector) (app.Repository, error) {
-	return do.MustInvoke[*gitlab.Repository](i), nil
+	gitlabRepo := do.MustInvoke[*gitlab.Repository](i)
+	cacheInstance := do.MustInvoke[cache.Cache](i)
+
+	return cached.NewCachedRepository(gitlabRepo, cacheInstance), nil
 }
 
 // NewHTTPServer creates a new HTTP server.
