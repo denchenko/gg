@@ -18,7 +18,7 @@ func Command(i do.Injector) (*cobra.Command, error) {
 	cfg := do.MustInvoke[*config.Config](i)
 
 	cmd.AddCommand(
-		commands.My(appInstance),
+		commands.My(cfg, appInstance),
 		commands.Team(appInstance),
 		commands.MR(cfg, appInstance),
 	)

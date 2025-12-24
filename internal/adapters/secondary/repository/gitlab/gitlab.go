@@ -3,24 +3,43 @@ package gitlab
 import (
 	"context"
 	"fmt"
+	"strconv"
+	"strings"
 	"sync"
+	"time"
 
 	"github.com/denchenko/gg/internal/core/domain"
 	gitlab "gitlab.com/gitlab-org/api/client-go"
 	"golang.org/x/sync/errgroup"
 )
 
-const perPageLimit = 100
+const (
+	perPageLimit = 100
+
+	// Event target types.
+	targetTypeMergeRequest = "merge_request" // Standard format
+	targetTypeMergerequest = "mergerequest"  // Alternative format used in some API responses
+	targetTypeIssue        = "issue"
+	targetTypeNote         = "note"
+	targetTypeDiffNote     = "diffnote"
+
+	// Noteable types.
+	//nolint: misspell // "Noteable" is a GitLab API term
+	noteableTypeMergeRequest = "mergerequest"
+	noteableTypeIssue        = "issue"
+)
 
 // Repository implements the app.Repository interface for GitLab.
 type Repository struct {
-	client *gitlab.Client
+	client  *gitlab.Client
+	baseURL string
 }
 
 // NewRepository creates a new GitLab repository instance.
-func NewRepository(client *gitlab.Client) *Repository {
+func NewRepository(client *gitlab.Client, baseURL string) *Repository {
 	return &Repository{
-		client: client,
+		client:  client,
+		baseURL: baseURL,
 	}
 }
 
@@ -172,6 +191,35 @@ func (r *Repository) batchGetUsers(ctx context.Context, userIDs []int) (map[int]
 	return users, nil
 }
 
+// batchGetProjects fetches multiple projects by ID in parallel.
+func (r *Repository) batchGetProjects(ctx context.Context, projectIDs []int) (map[int]string, error) {
+	g, ctx := errgroup.WithContext(ctx)
+	projects := make(map[int]string, len(projectIDs))
+	var mu sync.Mutex
+
+	for _, projectID := range projectIDs {
+		g.Go(func() error {
+			project, err := r.GetProject(ctx, strconv.Itoa(projectID))
+			if err != nil {
+				// Don't fail entire batch if one project fails
+				//nolint: nilerr // Intentionally ignore errors to not fail entire batch
+				return nil
+			}
+			mu.Lock()
+			projects[projectID] = project.Path
+			mu.Unlock()
+
+			return nil
+		})
+	}
+
+	if err := g.Wait(); err != nil {
+		return nil, fmt.Errorf("failed to fetch projects: %w", err)
+	}
+
+	return projects, nil
+}
+
 // GetProject retrieves a project by path.
 func (r *Repository) GetProject(_ context.Context, path string) (*domain.Project, error) {
 	project, _, err := r.client.Projects.GetProject(path, nil)
@@ -179,9 +227,14 @@ func (r *Repository) GetProject(_ context.Context, path string) (*domain.Project
 		return nil, fmt.Errorf("failed to get project: %w", err)
 	}
 
+	projectPath := project.PathWithNamespace
+	if projectPath == "" {
+		projectPath = project.Path
+	}
+
 	return &domain.Project{
 		ID:   project.ID,
-		Path: project.Path,
+		Path: projectPath,
 	}, nil
 }
 
@@ -377,6 +430,147 @@ func (r *Repository) UpdateMergeRequest(
 	return nil
 }
 
+// GetUserEvents retrieves user events within the specified time range.
+func (r *Repository) GetUserEvents(
+	ctx context.Context,
+	userID int,
+	after time.Time,
+	before *time.Time,
+) ([]*domain.Event, error) {
+	events, err := r.fetchContributionEvents(ctx, userID, after, before)
+	if err != nil {
+		return nil, err
+	}
+
+	return r.convertToDomainEvents(ctx, events)
+}
+
+// fetchContributionEvents fetches contribution events from the GitLab API.
+func (r *Repository) fetchContributionEvents(
+	_ context.Context,
+	userID int,
+	after time.Time,
+	before *time.Time,
+) ([]*gitlab.ContributionEvent, error) {
+	gitlabAfter := gitlab.ISOTime(after)
+
+	opts := &gitlab.ListContributionEventsOptions{
+		ListOptions: gitlab.ListOptions{
+			PerPage: perPageLimit,
+		},
+		After: &gitlabAfter,
+	}
+
+	if before != nil {
+		gitlabBefore := gitlab.ISOTime(*before)
+		opts.Before = &gitlabBefore
+	}
+
+	events, _, err := r.client.Users.ListUserContributionEvents(userID, opts)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get user events: %w", err)
+	}
+
+	return events, nil
+}
+
+// convertToDomainEvents converts GitLab contribution events to domain events.
+func (r *Repository) convertToDomainEvents(
+	ctx context.Context,
+	events []*gitlab.ContributionEvent,
+) ([]*domain.Event, error) {
+	projectIDs := make(map[int]struct{})
+	for _, event := range events {
+		if event.ProjectID > 0 {
+			projectIDs[event.ProjectID] = struct{}{}
+		}
+	}
+
+	projectIDSlice := make([]int, 0, len(projectIDs))
+	for id := range projectIDs {
+		projectIDSlice = append(projectIDSlice, id)
+	}
+
+	projectsMap := make(map[int]string)
+	if len(projectIDSlice) > 0 {
+		projects, err := r.batchGetProjects(ctx, projectIDSlice)
+		if err != nil {
+			return nil, fmt.Errorf("failed to batch fetch projects: %w", err)
+		}
+		projectsMap = projects
+	}
+
+	result := make([]*domain.Event, 0, len(events))
+	for _, event := range events {
+		projectPath := projectsMap[event.ProjectID]
+		webURL := r.buildEventURL(event, projectPath)
+		push := extractPushData(event)
+		note := extractNoteData(event)
+
+		domainEvent := &domain.Event{
+			ID:           event.ID,
+			Action:       event.ActionName,
+			TargetType:   event.TargetType,
+			TargetTitle:  event.TargetTitle,
+			TargetID:     event.TargetID,
+			ProjectID:    event.ProjectID,
+			ProjectPath:  projectPath,
+			CreatedAt:    *event.CreatedAt,
+			WebURL:       webURL,
+			PushRef:      push.Ref,
+			PushAction:   push.Action,
+			CommitCount:  push.CommitCount,
+			CommitTitle:  push.CommitTitle,
+			NoteBody:     note.Body,
+			NoteableType: note.NoteableType,
+		}
+
+		result = append(result, domainEvent)
+	}
+
+	return result, nil
+}
+
+// pushData holds extracted push event data.
+type pushData struct {
+	Ref         string
+	Action      string
+	CommitCount int
+	CommitTitle string
+}
+
+// extractPushData extracts push-related data from a contribution event.
+func extractPushData(event *gitlab.ContributionEvent) pushData {
+	if event.PushData.Ref == "" {
+		return pushData{}
+	}
+
+	return pushData{
+		Ref:         event.PushData.Ref,
+		Action:      event.PushData.Action,
+		CommitCount: event.PushData.CommitCount,
+		CommitTitle: event.PushData.CommitTitle,
+	}
+}
+
+// noteData holds extracted note/comment event data.
+type noteData struct {
+	Body         string
+	NoteableType string
+}
+
+// extractNoteData extracts note-related data from a contribution event.
+func extractNoteData(event *gitlab.ContributionEvent) noteData {
+	if event.Note == nil {
+		return noteData{}
+	}
+
+	return noteData{
+		Body:         event.Note.Body,
+		NoteableType: event.Note.NoteableType,
+	}
+}
+
 func (r *Repository) convertToDomainMRs(
 	mrs []*gitlab.BasicMergeRequest,
 	users map[int]*domain.User,
@@ -420,4 +614,83 @@ func (r *Repository) convertToDomainMRs(
 
 func pointerOf(v bool) *bool {
 	return &v
+}
+
+// buildMergeRequestURL constructs a URL for a merge request.
+func (r *Repository) buildMergeRequestURL(projectPath string, mrIID int) string {
+	return fmt.Sprintf("%s/%s/-/merge_requests/%d", r.baseURL, projectPath, mrIID)
+}
+
+// buildIssueURL constructs a URL for an issue.
+func (r *Repository) buildIssueURL(projectPath string, issueIID int) string {
+	return fmt.Sprintf("%s/%s/-/issues/%d", r.baseURL, projectPath, issueIID)
+}
+
+// buildNoteURL constructs a URL for a note/comment on a merge request or issue.
+func (r *Repository) buildNoteURL(projectPath, noteableType string, noteableIID, noteID int) string {
+	noteableTypeLower := strings.ToLower(noteableType)
+	if noteableTypeLower == noteableTypeMergeRequest || noteableTypeLower == targetTypeMergeRequest {
+		return fmt.Sprintf("%s/%s/-/merge_requests/%d#note_%d", r.baseURL, projectPath, noteableIID, noteID)
+	}
+	if noteableTypeLower == noteableTypeIssue || noteableTypeLower == targetTypeIssue {
+		return fmt.Sprintf("%s/%s/-/issues/%d#note_%d", r.baseURL, projectPath, noteableIID, noteID)
+	}
+
+	return ""
+}
+
+// buildEventURL constructs a URL for an event based on its type and data.
+func (r *Repository) buildEventURL(event *gitlab.ContributionEvent, projectPath string) string {
+	if projectPath == "" {
+		return ""
+	}
+
+	targetTypeLower := strings.ToLower(event.TargetType)
+	actionLower := strings.ToLower(event.ActionName)
+
+	// Handle note/comment events
+	isNote := targetTypeLower == targetTypeNote || targetTypeLower == targetTypeDiffNote
+	if isNote || strings.Contains(actionLower, "comment") {
+		if event.Note != nil && event.Note.NoteableType != "" {
+			noteableIID := event.Note.NoteableIID
+			if noteableIID == 0 {
+				noteableIID = event.TargetIID
+			}
+
+			return r.buildNoteURL(projectPath, event.Note.NoteableType, noteableIID, event.Note.ID)
+		}
+		// Fallback: try to infer from TargetType
+		if event.TargetIID > 0 {
+			isMR := strings.Contains(targetTypeLower, targetTypeMergeRequest) ||
+				strings.Contains(targetTypeLower, targetTypeMergerequest)
+			if isMR {
+				return r.buildMergeRequestURL(projectPath, event.TargetIID)
+			}
+			if strings.Contains(targetTypeLower, targetTypeIssue) {
+				return r.buildIssueURL(projectPath, event.TargetIID)
+			}
+		}
+
+		return ""
+	}
+
+	// Handle merge request events
+	if targetTypeLower == targetTypeMergeRequest || targetTypeLower == targetTypeMergerequest {
+		if event.TargetIID > 0 {
+			return r.buildMergeRequestURL(projectPath, event.TargetIID)
+		}
+
+		return ""
+	}
+
+	// Handle issue events
+	if targetTypeLower == targetTypeIssue {
+		if event.TargetIID > 0 {
+			return r.buildIssueURL(projectPath, event.TargetIID)
+		}
+
+		return ""
+	}
+
+	return ""
 }

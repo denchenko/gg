@@ -1,0 +1,16 @@
+{{- if not .EventsByProject}}
+No activity found.
+{{- else}}
+{{- range $projectName, $events := .EventsByProject}}
+{{formatBoxTitle $projectName}}
+│
+{{- range $events}}
+│ {{formatTime .CreatedAt}} - {{formatActivityDescription .}}
+{{- if .WebURL}}
+│   URL: {{.WebURL}}
+{{- end}}
+│
+{{- end}}
+{{formatBoxBottom}}
+{{- end}}
+{{- end}}

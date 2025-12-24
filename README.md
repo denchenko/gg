@@ -72,6 +72,7 @@ The CLI provides commands for managing merge requests and analyzing team workloa
 
 - `gg my mr` - Show your personal merge requests with status information
 - `gg my review` - Display your review workload (MRs assigned to you or requiring your review)
+- `gg my activity` - Show your activity events (pushes, comments, MR actions, etc.). Defaults to events from the last working day
 - `gg team review` - Show team-wide workload overview with active MR counts per member
 - `gg mr roulette [MR_URL]` - Analyze team workload and suggest optimal assignee and reviewer for a merge request
 

@@ -21,6 +21,12 @@ const (
 	boxTitlePadding   = 5
 	boxBottomPadding  = 2
 	minApprovalCount  = 2
+
+	// Activity description constants.
+	commitTitleMaxLen = 60
+	commitTitleTrunc  = 57
+	noteBodyMaxLen    = 80
+	noteBodyTrunc     = 77
 )
 
 var (
@@ -35,6 +41,9 @@ var (
 
 	//go:embed my_review.tmpl
 	myReviewTemplate string
+
+	//go:embed my_activity.tmpl
+	myActivityTemplate string
 )
 
 // TeamWorkloadData holds data for team workload templates.
@@ -88,36 +97,28 @@ type MRRouletteData struct {
 	Timestamp         time.Time
 }
 
+// MyActivityData holds data for my activity templates.
+type MyActivityData struct {
+	EventsByProject map[string][]*domain.Event
+	Timestamp       time.Time
+}
+
 // FormatTeamWorkload formats team workload data using a template.
 func FormatTeamWorkload(workloads []*domain.UserWorkload) (string, error) {
 	return executeWorkloadTemplate(teamReviewTemplate, workloads)
 }
 
 // FormatMyMergeRequestStatus formats my merge request status data using a template.
-func FormatMyMergeRequestStatus(mrs []*domain.MergeRequestWithStatus) (string, error) {
+func FormatMyMergeRequestStatus(baseURL string, mrs []*domain.MergeRequestWithStatus) (string, error) {
 	otherMRsByProject := make(map[string][]*domain.MergeRequestWithStatus)
-	getProjectName := func(webURL string) string {
-		parts := strings.Split(webURL, "/-/merge_requests/")
-		if len(parts) != urlPartsCount {
-			return unknownProject
-		}
-		projectPart := parts[0]
-		if strings.Contains(projectPart, "gitlab.com/") {
-			projectPart = strings.Split(projectPart, "gitlab.com/")[1]
-		} else if strings.Contains(projectPart, "gitlab.twinby.tech/") {
-			projectPart = strings.Split(projectPart, "gitlab.twinby.tech/")[1]
-		}
-
-		return projectPart
-	}
 	for _, mr := range mrs {
 		if !mr.IsCurrentProject {
-			projectName := getProjectName(mr.WebURL)
+			projectName := getProjectName(baseURL, mr.WebURL)
 			otherMRsByProject[projectName] = append(otherMRsByProject[projectName], mr)
 		}
 	}
 
-	return executeMyStatusTemplate(myMRTemplate, mrs, otherMRsByProject)
+	return executeMyStatusTemplate(baseURL, myMRTemplate, mrs, otherMRsByProject)
 }
 
 // FormatMRRoulette formats MR roulette data using a template.
@@ -131,28 +132,28 @@ func FormatMRRoulette(
 }
 
 // FormatMyReviewWorkload formats my review workload data using a template.
-func FormatMyReviewWorkload(mrs []*domain.MergeRequestWithStatus) (string, error) {
+func FormatMyReviewWorkload(baseURL string, mrs []*domain.MergeRequestWithStatus) (string, error) {
 	mrsByProject := make(map[string][]*domain.MergeRequestWithStatus)
-	getProjectName := func(webURL string) string {
-		parts := strings.Split(webURL, "/-/merge_requests/")
-		if len(parts) != urlPartsCount {
-			return unknownProject
-		}
-		projectPart := parts[0]
-		if strings.Contains(projectPart, "gitlab.com/") {
-			projectPart = strings.Split(projectPart, "gitlab.com/")[1]
-		} else if strings.Contains(projectPart, "gitlab.twinby.tech/") {
-			projectPart = strings.Split(projectPart, "gitlab.twinby.tech/")[1]
-		}
-
-		return projectPart
-	}
 	for _, mr := range mrs {
-		projectName := getProjectName(mr.WebURL)
+		projectName := getProjectName(baseURL, mr.WebURL)
 		mrsByProject[projectName] = append(mrsByProject[projectName], mr)
 	}
 
-	return executeMyReviewTemplate(myReviewTemplate, mrsByProject)
+	return executeMyReviewTemplate(baseURL, myReviewTemplate, mrsByProject)
+}
+
+// FormatMyActivity formats my activity data using a template.
+func FormatMyActivity(baseURL string, events []*domain.Event) (string, error) {
+	eventsByProject := make(map[string][]*domain.Event)
+	for _, event := range events {
+		projectName := event.ProjectPath
+		if projectName == "" {
+			projectName = unknownProject
+		}
+		eventsByProject[projectName] = append(eventsByProject[projectName], event)
+	}
+
+	return executeMyActivityTemplate(baseURL, myActivityTemplate, eventsByProject)
 }
 
 func executeWorkloadTemplate(templateStr string, workloads []*domain.UserWorkload) (string, error) {
@@ -261,17 +262,16 @@ func joinUsernames(users []*domain.User) string {
 	return strings.Join(usernames, ", ")
 }
 
-func getProjectName(webURL string) string {
+func getProjectName(baseURL, webURL string) string {
 	parts := strings.Split(webURL, "/-/merge_requests/")
 	if len(parts) != urlPartsCount {
 		return unknownProject
 	}
 
 	projectPart := parts[0]
-	if strings.Contains(projectPart, "gitlab.com/") {
-		projectPart = strings.Split(projectPart, "gitlab.com/")[1]
-	} else if strings.Contains(projectPart, "gitlab.twinby.tech/") {
-		projectPart = strings.Split(projectPart, "gitlab.twinby.tech/")[1]
+	// Remove the base URL prefix to get the project path
+	if strings.HasPrefix(projectPart, baseURL+"/") {
+		projectPart = strings.TrimPrefix(projectPart, baseURL+"/")
 	}
 
 	return projectPart
@@ -313,12 +313,12 @@ func getMRRouletteTemplateFuncs(workloads []*domain.UserWorkload) template.FuncM
 	}
 }
 
-func getMyStatusTemplateFuncs() template.FuncMap {
+func getMyStatusTemplateFuncs(baseURL string) template.FuncMap {
 	return template.FuncMap{
 		"formatTime":      formatTime,
 		"joinUsernames":   joinUsernames,
 		"getStatusEmoji":  getStatusEmoji,
-		"getProjectName":  getProjectName,
+		"getProjectName":  func(webURL string) string { return getProjectName(baseURL, webURL) },
 		"repeat":          strings.Repeat,
 		"formatBoxTitle":  formatBoxTitle,
 		"formatBoxBottom": formatBoxBottom,
@@ -334,12 +334,12 @@ func getMyStatusTemplateFuncs() template.FuncMap {
 	}
 }
 
-func getMyReviewTemplateFuncs() template.FuncMap {
+func getMyReviewTemplateFuncs(baseURL string) template.FuncMap {
 	return template.FuncMap{
 		"formatTime":          formatTime,
 		"joinUsernames":       joinUsernames,
 		"getStatusEmoji":      getStatusEmoji,
-		"getProjectName":      getProjectName,
+		"getProjectName":      func(webURL string) string { return getProjectName(baseURL, webURL) },
 		"truncateDescription": truncateDescription,
 		"formatBoxTitle":      formatBoxTitle,
 		"formatBoxBottom":     formatBoxBottom,
@@ -383,11 +383,12 @@ func executeMRRouletteTemplate(
 }
 
 func executeMyStatusTemplate(
+	baseURL string,
 	templateStr string,
 	mrs []*domain.MergeRequestWithStatus,
 	otherMRsByProject map[string][]*domain.MergeRequestWithStatus,
 ) (string, error) {
-	tmpl, err := template.New("myMergeRequestStatus").Funcs(getMyStatusTemplateFuncs()).Parse(templateStr)
+	tmpl, err := template.New("myMergeRequestStatus").Funcs(getMyStatusTemplateFuncs(baseURL)).Parse(templateStr)
 
 	if err != nil {
 		return "", fmt.Errorf("failed to parse template: %w", err)
@@ -408,10 +409,11 @@ func executeMyStatusTemplate(
 }
 
 func executeMyReviewTemplate(
+	baseURL string,
 	templateStr string,
 	mrsByProject map[string][]*domain.MergeRequestWithStatus,
 ) (string, error) {
-	tmpl, err := template.New("myReview").Funcs(getMyReviewTemplateFuncs()).Parse(templateStr)
+	tmpl, err := template.New("myReview").Funcs(getMyReviewTemplateFuncs(baseURL)).Parse(templateStr)
 
 	if err != nil {
 		return "", fmt.Errorf("failed to parse template: %w", err)
@@ -430,4 +432,164 @@ func executeMyReviewTemplate(
 	}
 
 	return buf.String(), nil
+}
+
+func executeMyActivityTemplate(
+	baseURL string,
+	templateStr string,
+	eventsByProject map[string][]*domain.Event,
+) (string, error) {
+	tmpl, err := template.New("myActivity").Funcs(getMyActivityTemplateFuncs(baseURL)).Parse(templateStr)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse template: %w", err)
+	}
+
+	data := MyActivityData{
+		EventsByProject: eventsByProject,
+		Timestamp:       time.Now(),
+	}
+
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, data); err != nil {
+		return "", fmt.Errorf("failed to execute template: %w", err)
+	}
+
+	return buf.String(), nil
+}
+
+func getMyActivityTemplateFuncs(baseURL string) template.FuncMap {
+	return template.FuncMap{
+		"formatTime":                formatTime,
+		"getProjectName":            func(webURL string) string { return getProjectName(baseURL, webURL) },
+		"formatBoxTitle":            formatBoxTitle,
+		"formatBoxBottom":           formatBoxBottom,
+		"formatActivityDescription": formatActivityDescription,
+		"bold": func(text string) string {
+			return "\033[1m" + text + "\033[0m"
+		},
+	}
+}
+
+func formatActivityDescription(event *domain.Event) string {
+	action := strings.ToLower(event.Action)
+	targetType := strings.ToLower(event.TargetType)
+
+	// Handle push events
+	if (targetType == "" || strings.Contains(action, "push") || event.Action == "deleted") && event.PushRef != "" {
+		return formatPushEventDescription(event)
+	}
+
+	// Handle note/comment events
+	if targetType == "note" || strings.Contains(action, "comment") {
+		return formatCommentEventDescription(event)
+	}
+
+	// Handle merge request events
+	if targetType == "mergerequest" || targetType == "merge_request" {
+		return formatMergeRequestEventDescription(event)
+	}
+
+	// Handle issue events
+	if targetType == "issue" {
+		return formatIssueEventDescription(event)
+	}
+
+	// Default formatter
+	return formatDefaultEventDescription(event)
+}
+
+func formatPushEventDescription(event *domain.Event) string {
+	ref := normalizeRef(event.PushRef)
+	refType := getRefType(event.PushRef)
+	pushAction := event.PushAction
+	if pushAction == "" {
+		pushAction = event.Action
+	}
+
+	desc := fmt.Sprintf("%s %s %s", pushAction, refType, ref)
+	if event.CommitCount > 0 {
+		desc += fmt.Sprintf(" (%d commit%s", event.CommitCount, pluralize(event.CommitCount))
+		if event.CommitTitle != "" {
+			title := truncateText(event.CommitTitle, commitTitleMaxLen, commitTitleTrunc)
+			desc += ": " + title
+		}
+		desc += ")"
+	}
+
+	return desc
+}
+
+func formatCommentEventDescription(event *domain.Event) string {
+	desc := "commented"
+	if event.TargetTitle != "" {
+		desc += ": " + event.TargetTitle
+	}
+	if event.NoteBody != "" {
+		body := strings.ReplaceAll(event.NoteBody, "\n", " ")
+		body = truncateText(body, noteBodyMaxLen, noteBodyTrunc)
+		desc += fmt.Sprintf(" (%s)", body)
+	}
+
+	return desc
+}
+
+func formatMergeRequestEventDescription(event *domain.Event) string {
+	desc := event.Action
+	if event.TargetTitle != "" {
+		desc += ": " + event.TargetTitle
+	}
+
+	return desc
+}
+
+func formatIssueEventDescription(event *domain.Event) string {
+	desc := event.Action
+	if event.TargetTitle != "" {
+		desc += ": " + event.TargetTitle
+	}
+
+	return desc
+}
+
+func formatDefaultEventDescription(event *domain.Event) string {
+	desc := event.Action
+	if event.TargetType != "" {
+		desc += " " + event.TargetType
+	}
+	if event.TargetTitle != "" {
+		desc += ": " + event.TargetTitle
+	}
+
+	return desc
+}
+
+func normalizeRef(ref string) string {
+	ref = strings.TrimPrefix(ref, "refs/tags/")
+	ref = strings.TrimPrefix(ref, "refs/heads/")
+
+	return ref
+}
+
+func getRefType(ref string) string {
+	if strings.HasPrefix(ref, "refs/tags/") {
+		return "tag"
+	}
+
+	return "branch"
+}
+
+func truncateText(text string, maxLen, truncLen int) string {
+	if len(text) > maxLen {
+		return text[:truncLen] + "..."
+	}
+
+	return text
+}
+
+func pluralize(count int) string {
+	if count == 1 {
+		return ""
+	}
+
+	return "s"
 }

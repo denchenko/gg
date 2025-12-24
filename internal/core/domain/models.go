@@ -59,3 +59,21 @@ type Project struct {
 	ID   int
 	Path string
 }
+
+type Event struct {
+	ID           int
+	Action       string
+	TargetType   string
+	TargetTitle  string
+	TargetID     int
+	ProjectID    int
+	ProjectPath  string
+	CreatedAt    time.Time
+	WebURL       string
+	PushRef      string
+	PushAction   string
+	CommitCount  int
+	CommitTitle  string
+	NoteBody     string
+	NoteableType string // Type of item the note is on (MergeRequest, Issue, etc.)
+}

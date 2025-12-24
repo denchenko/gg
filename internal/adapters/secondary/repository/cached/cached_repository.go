@@ -3,6 +3,7 @@ package cached
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/denchenko/gg/internal/adapters/secondary/cache"
 	"github.com/denchenko/gg/internal/adapters/secondary/repository/gitlab"
@@ -200,4 +201,19 @@ func (r *CachedRepository) UpdateMergeRequest(
 	}
 
 	return nil
+}
+
+// GetUserEvents retrieves user events within the specified time range.
+func (r *CachedRepository) GetUserEvents(
+	ctx context.Context,
+	userID int,
+	after time.Time,
+	before *time.Time,
+) ([]*domain.Event, error) {
+	events, err := r.repo.GetUserEvents(ctx, userID, after, before)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get user events: %w", err)
+	}
+
+	return events, nil
 }

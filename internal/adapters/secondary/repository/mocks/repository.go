@@ -2,6 +2,7 @@ package mocks
 
 import (
 	"context"
+	"time"
 
 	"github.com/denchenko/gg/internal/core/domain"
 	"github.com/stretchr/testify/mock"
@@ -118,4 +119,19 @@ func (m *MockRepository) UpdateMergeRequest(
 	args := m.Called(ctx, projectID, mrID, assigneeID, reviewerIDs)
 
 	return args.Error(0)
+}
+
+// GetUserEvents mocks the GetUserEvents method.
+func (m *MockRepository) GetUserEvents(
+	ctx context.Context,
+	userID int,
+	since time.Time,
+	till *time.Time,
+) ([]*domain.Event, error) {
+	args := m.Called(ctx, userID, since, till)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+
+	return args.Get(0).([]*domain.Event), args.Error(1)
 }

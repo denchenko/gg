@@ -41,8 +41,9 @@ func NewGitLabClient(i do.Injector) (*glclient.Client, error) {
 // NewGitLabRepository creates a new GitLab repository instance.
 func NewGitLabRepository(i do.Injector) (*gitlab.Repository, error) {
 	client := do.MustInvoke[*glclient.Client](i)
+	cfg := do.MustInvoke[*config.Config](i)
 
-	return gitlab.NewRepository(client), nil
+	return gitlab.NewRepository(client, cfg.BaseURL), nil
 }
 
 // NewCache creates a new cache instance.

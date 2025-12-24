@@ -29,6 +29,7 @@ type Repository interface {
 	GetCurrentUser(ctx context.Context) (*domain.User, error)
 	ListCommits(ctx context.Context, projectID int) ([]*domain.Commit, error)
 	UpdateMergeRequest(ctx context.Context, projectID, mrID int, assigneeID *int, reviewerIDs []int) error
+	GetUserEvents(ctx context.Context, userID int, since time.Time, till *time.Time) ([]*domain.Event, error)
 }
 
 // App represents the core application with all business logic.
@@ -471,6 +472,21 @@ func (a *App) GetMyReviewWorkloadWithStatus(ctx context.Context) ([]*domain.Merg
 	)
 
 	return a.SortMergeRequestsByPriority(mrsWithStatus, currentProjectID, currentBranch), nil
+}
+
+// GetMyActivity retrieves the current user's activity events within the specified time range.
+func (a *App) GetMyActivity(ctx context.Context, since time.Time, till *time.Time) ([]*domain.Event, error) {
+	currentUser, err := a.getCurrentUser(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get current user: %w", err)
+	}
+
+	events, err := a.repo.GetUserEvents(ctx, currentUser.ID, since, till)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get user events: %w", err)
+	}
+
+	return events, nil
 }
 
 func (a *App) getCurrentProjectInfoSafe(ctx context.Context) (int, string) {
