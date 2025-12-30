@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os/exec"
 	"strconv"
 	"strings"
 	"time"
@@ -14,6 +13,7 @@ import (
 	"github.com/denchenko/gg/internal/core/domain"
 	ascii "github.com/denchenko/gg/internal/format/ascii"
 	"github.com/denchenko/gg/internal/log"
+	"github.com/skratchdot/open-golang/open"
 	"github.com/spf13/cobra"
 )
 
@@ -164,9 +164,8 @@ func newMRBrowseCommand(appInstance *app.App) *cobra.Command {
 				return fmt.Errorf("failed to find merge request for branch %s: %w", currentBranch, err)
 			}
 
-			// Open URL in browser using open
-			cmd := exec.CommandContext(ctx, "open", mr.WebURL)
-			if err := cmd.Run(); err != nil {
+			// Open URL in browser
+			if err := open.Start(mr.WebURL); err != nil {
 				return fmt.Errorf("failed to open browser: %w", err)
 			}
 

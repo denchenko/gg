@@ -4,11 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os/exec"
 
 	"github.com/denchenko/gg/internal/core/app"
 	"github.com/denchenko/gg/internal/issue"
 	"github.com/spf13/cobra"
+
+	"github.com/skratchdot/open-golang/open"
 )
 
 func Issue(appInstance *app.App, issuer *issue.Issuer) *cobra.Command {
@@ -53,9 +54,8 @@ func Issue(appInstance *app.App, issuer *issue.Issuer) *cobra.Command {
 				return errors.New("issue URL template is not configured (GG_ISSUE_URL_TEMPLATE)")
 			}
 
-			// Open URL in browser using open
-			cmd := exec.CommandContext(ctx, "open", issueURL)
-			if err := cmd.Run(); err != nil {
+			// Open URL in browser
+			if err := open.Start(issueURL); err != nil {
 				return fmt.Errorf("failed to open browser: %w", err)
 			}
 
