@@ -25,18 +25,27 @@ func MR(cfg *config.Config, appInstance *app.App) *cobra.Command {
 		Use:   "roulette [MR_URL]",
 		Short: "Suggest assignee and reviewer for a merge request",
 		Long: `Analyze team review workload and suggest appropriate assignee and reviewer for a merge request.
-If MR_URL is not provided, it will try to get the current merge request URL from git.`,
+If MR_URL is not provided, it will try to find the merge request for the current git branch.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
+			ctx := context.Background()
 			var mrURL string
+
 			if len(args) > 0 {
 				mrURL = args[0]
 			} else {
-				var err error
-				mrURL, err = appInstance.GetCurrentMRURL(context.Background())
+				// Infer MR from current git branch
+				currentProject, currentBranch, err := appInstance.GetCurrentProjectInfo(ctx)
 				if err != nil {
-					return fmt.Errorf("failed to get current MR URL: %w", err)
+					return fmt.Errorf("failed to get current project info: %w", err)
 				}
+
+				mr, err := appInstance.GetMergeRequestByBranch(ctx, currentProject.ID, currentBranch)
+				if err != nil {
+					return fmt.Errorf("failed to find merge request for branch %s: %w", currentBranch, err)
+				}
+
+				mrURL = mr.WebURL
 			}
 
 			return suggestAssignees(cfg, appInstance, mrURL)

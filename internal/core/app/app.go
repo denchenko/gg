@@ -441,35 +441,6 @@ func (a *App) GetMergeRequestsWithStatus(ctx context.Context) ([]*domain.MergeRe
 	return a.SortMergeRequestsByPriority(mrsWithStatus, currentProjectID, currentBranch), nil
 }
 
-// GetCurrentMRURL retrieves the current merge request URL from git.
-func (a *App) GetCurrentMRURL(ctx context.Context) (string, error) {
-	cmd := exec.CommandContext(ctx, "git", "remote", "get-url", "origin")
-	output, err := cmd.Output()
-	if err != nil {
-		return "", fmt.Errorf("failed to get remote URL: %w", err)
-	}
-
-	remoteURL := strings.TrimSpace(string(output))
-
-	cmd = exec.CommandContext(ctx, "git", "branch", "--show-current")
-	output, err = cmd.Output()
-	if err != nil {
-		return "", fmt.Errorf("failed to get current branch: %w", err)
-	}
-
-	branch := strings.TrimSpace(string(output))
-	if branch == "" {
-		return "", errors.New("failed to get current branch")
-	}
-
-	if strings.HasPrefix(remoteURL, "git@") {
-		remoteURL = strings.Replace(remoteURL, "git@gitlab.com:", "https://gitlab.com/", 1)
-		remoteURL = strings.Replace(remoteURL, ".git", "", 1)
-	}
-
-	return fmt.Sprintf("%s/-/merge_requests/new?merge_request[source_branch]=%s", remoteURL, branch), nil
-}
-
 // UpdateMergeRequest updates a merge request with optional assignee and reviewers.
 func (a *App) UpdateMergeRequest(ctx context.Context, projectID, mrID int, assigneeID *int, reviewerIDs []int) error {
 	if err := a.repo.UpdateMergeRequest(ctx, projectID, mrID, assigneeID, reviewerIDs); err != nil {
