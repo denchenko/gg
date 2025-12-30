@@ -45,14 +45,37 @@ If MR_URL is not provided, it will try to find the merge request for the current
 				mrURL = args[0]
 			} else {
 				// Infer MR from current git branch
-				currentProject, currentBranch, err := appInstance.GetCurrentProjectInfo(ctx)
+				var (
+					err            error
+					currentProject *domain.Project
+					currentBranch  string
+				)
+
+				err = log.WithSpinner("Getting current project info...", func() error {
+					var err error
+					currentProject, currentBranch, err = appInstance.GetCurrentProjectInfo(ctx)
+					if err != nil {
+						return fmt.Errorf("failed to get current project info: %w", err)
+					}
+
+					return nil
+				})
 				if err != nil {
 					return fmt.Errorf("failed to get current project info: %w", err)
 				}
 
-				mr, err := appInstance.GetMergeRequestByBranch(ctx, currentProject.ID, currentBranch)
+				var mr *domain.MergeRequest
+				err = log.WithSpinner("Finding merge request...", func() error {
+					var err error
+					mr, err = appInstance.GetMergeRequestByBranch(ctx, currentProject.ID, currentBranch)
+					if err != nil {
+						return fmt.Errorf("failed to find merge request for branch %s: %w", currentBranch, err)
+					}
+
+					return nil
+				})
 				if err != nil {
-					return fmt.Errorf("failed to find merge request for branch %s: %w", currentBranch, err)
+					return fmt.Errorf("failed to find merge request: %w", err)
 				}
 
 				mrURL = mr.WebURL
@@ -101,24 +124,70 @@ func showMRStatus(cfg *config.Config, appInstance *app.App, formatter *ascii.For
 		}
 	} else {
 		// Infer MR from current git branch
-		currentProject, currentBranch, err := appInstance.GetCurrentProjectInfo(ctx)
+		var currentProject *domain.Project
+		var currentBranch string
+		err := log.WithSpinner("Getting current project info...", func() error {
+			var err error
+			currentProject, currentBranch, err = appInstance.GetCurrentProjectInfo(ctx)
+			if err != nil {
+				return fmt.Errorf("failed to get current project info: %w", err)
+			}
+
+			return nil
+		})
 		if err != nil {
 			return fmt.Errorf("failed to get current project info: %w", err)
 		}
 
 		project = currentProject
-		mr, err = appInstance.GetMergeRequestByBranch(ctx, project.ID, currentBranch)
+		err = log.WithSpinner("Finding merge request...", func() error {
+			var err error
+			mr, err = appInstance.GetMergeRequestByBranch(ctx, project.ID, currentBranch)
+			if err != nil {
+				return fmt.Errorf("failed to find merge request for branch %s: %w", currentBranch, err)
+			}
+
+			return nil
+		})
 		if err != nil {
-			return fmt.Errorf("failed to find merge request for branch %s: %w", currentBranch, err)
+			return fmt.Errorf("failed to find merge request: %w", err)
 		}
 	}
 
 	// Fetch approvals
-	approvals, err := appInstance.GetMergeRequestApprovals(ctx, project.ID, mr.IID)
+	approvals, err := fetchApprovals(ctx, appInstance, project.ID, mr.IID)
 	if err != nil {
-		return fmt.Errorf("failed to get merge request approvals: %w", err)
+		return err
 	}
 
+	// Calculate and display status
+	return displayMRStatus(cfg, formatter, mr, approvals)
+}
+
+func fetchApprovals(ctx context.Context, appInstance *app.App, projectID, mrIID int) ([]*domain.User, error) {
+	var approvals []*domain.User
+	err := log.WithSpinner("Fetching approvals...", func() error {
+		var err error
+		approvals, err = appInstance.GetMergeRequestApprovals(ctx, projectID, mrIID)
+		if err != nil {
+			return fmt.Errorf("failed to get merge request approvals: %w", err)
+		}
+
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch approvals: %w", err)
+	}
+
+	return approvals, nil
+}
+
+func displayMRStatus(
+	cfg *config.Config,
+	formatter *ascii.Formatter,
+	mr *domain.MergeRequest,
+	approvals []*domain.User,
+) error {
 	// Calculate status
 	const workingDaysThreshold = 3
 	now := time.Now()
@@ -153,15 +222,34 @@ func newMRBrowseCommand(appInstance *app.App) *cobra.Command {
 			ctx := context.Background()
 
 			// Get current project and branch
-			currentProject, currentBranch, err := appInstance.GetCurrentProjectInfo(ctx)
+			var currentProject *domain.Project
+			var currentBranch string
+			err := log.WithSpinner("Getting current project info...", func() error {
+				var err error
+				currentProject, currentBranch, err = appInstance.GetCurrentProjectInfo(ctx)
+				if err != nil {
+					return fmt.Errorf("failed to get current project info: %w", err)
+				}
+
+				return nil
+			})
 			if err != nil {
 				return fmt.Errorf("failed to get current project info: %w", err)
 			}
 
 			// Get MR for current branch
-			mr, err := appInstance.GetMergeRequestByBranch(ctx, currentProject.ID, currentBranch)
+			var mr *domain.MergeRequest
+			err = log.WithSpinner("Finding merge request...", func() error {
+				var err error
+				mr, err = appInstance.GetMergeRequestByBranch(ctx, currentProject.ID, currentBranch)
+				if err != nil {
+					return fmt.Errorf("failed to find merge request for branch %s: %w", currentBranch, err)
+				}
+
+				return nil
+			})
 			if err != nil {
-				return fmt.Errorf("failed to find merge request for branch %s: %w", currentBranch, err)
+				return fmt.Errorf("failed to find merge request: %w", err)
 			}
 
 			// Open URL in browser
