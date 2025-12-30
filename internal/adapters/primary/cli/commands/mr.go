@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os/exec"
 	"strconv"
 	"strings"
 	"time"
@@ -120,6 +121,36 @@ If MR_URL is not provided, it will try to find the merge request for the current
 			}
 
 			fmt.Print(formatted)
+
+			return nil
+		},
+	})
+
+	cmd.AddCommand(&cobra.Command{
+		Use:   "browse",
+		Short: "Open merge request in browser",
+		Long:  `Open the merge request for the current git branch in your default browser.`,
+		Args:  cobra.NoArgs,
+		RunE: func(_ *cobra.Command, args []string) error {
+			ctx := context.Background()
+
+			// Get current project and branch
+			currentProject, currentBranch, err := appInstance.GetCurrentProjectInfo(ctx)
+			if err != nil {
+				return fmt.Errorf("failed to get current project info: %w", err)
+			}
+
+			// Get MR for current branch
+			mr, err := appInstance.GetMergeRequestByBranch(ctx, currentProject.ID, currentBranch)
+			if err != nil {
+				return fmt.Errorf("failed to find merge request for branch %s: %w", currentBranch, err)
+			}
+
+			// Open URL in browser using open
+			cmd := exec.CommandContext(ctx, "open", mr.WebURL)
+			if err := cmd.Run(); err != nil {
+				return fmt.Errorf("failed to open browser: %w", err)
+			}
 
 			return nil
 		},
