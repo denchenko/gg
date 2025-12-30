@@ -5,6 +5,8 @@ import (
 
 	"github.com/denchenko/gg/internal/config"
 	"github.com/denchenko/gg/internal/core/app"
+	ascii "github.com/denchenko/gg/internal/format/ascii"
+	"github.com/denchenko/gg/internal/issue"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -78,8 +80,10 @@ func TestParseMRURL(t *testing.T) {
 func TestMR(t *testing.T) {
 	cfg := &config.Config{BaseURL: "https://gitlab.com"}
 	appInstance := &app.App{}
+	issuer := issue.NewIssuer("")
+	formatter := ascii.NewFormatter(issuer)
 
-	cmd := MR(cfg, appInstance)
+	cmd := MR(cfg, appInstance, formatter)
 
 	assert.NotNil(t, cmd)
 	assert.Equal(t, "mr", cmd.Use)

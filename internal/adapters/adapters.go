@@ -10,6 +10,8 @@ import (
 	"github.com/denchenko/gg/internal/adapters/secondary/repository/gitlab"
 	"github.com/denchenko/gg/internal/config"
 	"github.com/denchenko/gg/internal/core/app"
+	ascii "github.com/denchenko/gg/internal/format/ascii"
+	"github.com/denchenko/gg/internal/issue"
 	do "github.com/samber/do/v2"
 	"github.com/spf13/cobra"
 	glclient "gitlab.com/gitlab-org/api/client-go"
@@ -25,6 +27,8 @@ var SecondaryPackage = do.Package(
 	do.Lazy[*gitlab.Repository](NewGitLabRepository),
 	do.Lazy[cache.Cache](NewCache),
 	do.Lazy[app.Repository](NewRepository),
+	do.Lazy[*issue.Issuer](NewIssuer),
+	do.Lazy[*ascii.Formatter](NewFormatter),
 )
 
 // NewGitLabClient creates a new GitLab client.
@@ -66,4 +70,18 @@ func NewHTTPServer(i do.Injector) (*httpadapter.Server, error) {
 	cfg := do.MustInvoke[*config.Config](i)
 
 	return httpadapter.NewServer(cfg.WebhookAddress, appInstance), nil
+}
+
+// NewIssuer creates a new Issuer instance.
+func NewIssuer(i do.Injector) (*issue.Issuer, error) {
+	cfg := do.MustInvoke[*config.Config](i)
+
+	return issue.NewIssuer(cfg.IssueURLTemplate), nil
+}
+
+// NewFormatter creates a new Formatter instance.
+func NewFormatter(i do.Injector) (*ascii.Formatter, error) {
+	issuer := do.MustInvoke[*issue.Issuer](i)
+
+	return ascii.NewFormatter(issuer), nil
 }

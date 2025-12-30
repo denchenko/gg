@@ -149,7 +149,7 @@ func TestNew(t *testing.T) {
 			},
 			expectError: false,
 			validate: func(t *testing.T, cfg *Config) {
-				assert.Equal(t, "", cfg.IssueURLTemplate)
+				assert.Empty(t, cfg.IssueURLTemplate)
 			},
 		},
 	}

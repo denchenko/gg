@@ -9,47 +9,47 @@ import (
 	"github.com/denchenko/gg/internal/config"
 	"github.com/denchenko/gg/internal/core/app"
 	"github.com/denchenko/gg/internal/core/domain"
-	"github.com/denchenko/gg/internal/format/ascii"
+	ascii "github.com/denchenko/gg/internal/format/ascii"
 	"github.com/denchenko/gg/internal/log"
 	"github.com/spf13/cobra"
 )
 
-func My(cfg *config.Config, appInstance *app.App) *cobra.Command {
+func My(cfg *config.Config, appInstance *app.App, formatter *ascii.Formatter) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "my",
 		Short: "Everything related to you",
 	}
 
 	cmd.AddCommand(
-		MyMR(cfg, appInstance),
-		MyReview(cfg, appInstance),
-		MyActivity(cfg, appInstance),
+		MyMR(cfg, appInstance, formatter),
+		MyReview(cfg, appInstance, formatter),
+		MyActivity(cfg, appInstance, formatter),
 	)
 
 	return cmd
 }
 
-func MyMR(cfg *config.Config, appInstance *app.App) *cobra.Command {
+func MyMR(cfg *config.Config, appInstance *app.App, formatter *ascii.Formatter) *cobra.Command {
 	return &cobra.Command{
 		Use:   "mr",
 		Short: "Show your merge requests status",
 		RunE: func(_ *cobra.Command, _ []string) error {
-			return showMyMRStatus(cfg, appInstance)
+			return showMyMRStatus(cfg, appInstance, formatter)
 		},
 	}
 }
 
-func MyReview(cfg *config.Config, appInstance *app.App) *cobra.Command {
+func MyReview(cfg *config.Config, appInstance *app.App, formatter *ascii.Formatter) *cobra.Command {
 	return &cobra.Command{
 		Use:   "review",
 		Short: "Show your review workload",
 		RunE: func(_ *cobra.Command, _ []string) error {
-			return showMyReviewWorkload(cfg, appInstance)
+			return showMyReviewWorkload(cfg, appInstance, formatter)
 		},
 	}
 }
 
-func showMyReviewWorkload(cfg *config.Config, appInstance *app.App) error {
+func showMyReviewWorkload(cfg *config.Config, appInstance *app.App, formatter *ascii.Formatter) error {
 	ctx := context.Background()
 
 	var mrsWithStatus []*domain.MergeRequestWithStatus
@@ -67,7 +67,7 @@ func showMyReviewWorkload(cfg *config.Config, appInstance *app.App) error {
 		return fmt.Errorf("failed to get review workload: %w", err)
 	}
 
-	formatted, err := ascii.FormatMyReviewWorkload(cfg.BaseURL, mrsWithStatus, cfg.IssueURLTemplate)
+	formatted, err := formatter.FormatMyReviewWorkload(cfg.BaseURL, mrsWithStatus)
 	if err != nil {
 		return fmt.Errorf("failed to format output: %w", err)
 	}
@@ -77,7 +77,7 @@ func showMyReviewWorkload(cfg *config.Config, appInstance *app.App) error {
 	return nil
 }
 
-func showMyMRStatus(cfg *config.Config, appInstance *app.App) error {
+func showMyMRStatus(cfg *config.Config, appInstance *app.App, formatter *ascii.Formatter) error {
 	ctx := context.Background()
 
 	var mrsWithStatus []*domain.MergeRequestWithStatus
@@ -95,7 +95,7 @@ func showMyMRStatus(cfg *config.Config, appInstance *app.App) error {
 		return fmt.Errorf("failed to get merge requests: %w", err)
 	}
 
-	formatted, err := ascii.FormatMyMergeRequestStatus(cfg.BaseURL, mrsWithStatus, cfg.IssueURLTemplate)
+	formatted, err := formatter.FormatMyMergeRequestStatus(cfg.BaseURL, mrsWithStatus)
 	if err != nil {
 		return fmt.Errorf("failed to format output: %w", err)
 	}
@@ -111,14 +111,14 @@ type ActivityDateRange struct {
 	Before *time.Time
 }
 
-func MyActivity(cfg *config.Config, appInstance *app.App) *cobra.Command {
+func MyActivity(cfg *config.Config, appInstance *app.App, formatter *ascii.Formatter) *cobra.Command {
 	var afterStr, beforeStr string
 
 	cmd := &cobra.Command{
 		Use:   "activity",
 		Short: "Show your activity",
 		RunE: func(_ *cobra.Command, _ []string) error {
-			return showMyActivity(cfg, appInstance, afterStr, beforeStr)
+			return showMyActivity(cfg, appInstance, formatter, afterStr, beforeStr)
 		},
 	}
 
@@ -129,7 +129,12 @@ func MyActivity(cfg *config.Config, appInstance *app.App) *cobra.Command {
 	return cmd
 }
 
-func showMyActivity(cfg *config.Config, appInstance *app.App, afterStr, beforeStr string) error {
+func showMyActivity(
+	cfg *config.Config,
+	appInstance *app.App,
+	formatter *ascii.Formatter,
+	afterStr, beforeStr string,
+) error {
 	ctx := context.Background()
 
 	dateRange, err := parseActivityDates(afterStr, beforeStr, time.Now())
@@ -152,7 +157,7 @@ func showMyActivity(cfg *config.Config, appInstance *app.App, afterStr, beforeSt
 		return fmt.Errorf("failed to get activity: %w", err)
 	}
 
-	formatted, err := ascii.FormatMyActivity(cfg.BaseURL, events, cfg.IssueURLTemplate)
+	formatted, err := formatter.FormatMyActivity(cfg.BaseURL, events)
 	if err != nil {
 		return fmt.Errorf("failed to format output: %w", err)
 	}

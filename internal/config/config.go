@@ -14,10 +14,10 @@ var Package = do.Package(
 
 // Config holds the application configuration.
 type Config struct {
-	BaseURL         string
-	Token           string
-	TeamUsers       []string
-	WebhookAddress  string
+	BaseURL          string
+	Token            string
+	TeamUsers        []string
+	WebhookAddress   string
 	IssueURLTemplate string
 }
 

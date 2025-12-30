@@ -17,12 +17,21 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func MR(cfg *config.Config, appInstance *app.App) *cobra.Command {
+func MR(cfg *config.Config, appInstance *app.App, formatter *ascii.Formatter) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "mr",
 		Short: "Merge Requests",
 	}
-	cmd.AddCommand(&cobra.Command{
+
+	cmd.AddCommand(newMRRouletteCommand(cfg, appInstance, formatter))
+	cmd.AddCommand(newMRStatusCommand(cfg, appInstance, formatter))
+	cmd.AddCommand(newMRBrowseCommand(appInstance))
+
+	return cmd
+}
+
+func newMRRouletteCommand(cfg *config.Config, appInstance *app.App, formatter *ascii.Formatter) *cobra.Command {
+	return &cobra.Command{
 		Use:   "roulette [MR_URL]",
 		Short: "Suggest assignee and reviewer for a merge request",
 		Long: `Analyze team review workload and suggest appropriate assignee and reviewer for a merge request.
@@ -49,89 +58,98 @@ If MR_URL is not provided, it will try to find the merge request for the current
 				mrURL = mr.WebURL
 			}
 
-			return suggestAssignees(cfg, appInstance, mrURL)
+			return suggestAssignees(cfg, appInstance, formatter, mrURL)
 		},
-	})
+	}
+}
 
-	cmd.AddCommand(&cobra.Command{
+func newMRStatusCommand(cfg *config.Config, appInstance *app.App, formatter *ascii.Formatter) *cobra.Command {
+	return &cobra.Command{
 		Use:   "status [MR_URL]",
 		Short: "Show status of a merge request",
 		Long: `Display detailed status information for a merge request.
 If MR_URL is not provided, it will try to find the merge request for the current git branch.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
-			ctx := context.Background()
-
-			var mr *domain.MergeRequest
-			var project *domain.Project
-			var err error
-
-			if len(args) > 0 {
-				// Parse MR URL
-				projectPath, mrID, err := parseMRURL(cfg.BaseURL, args[0])
-				if err != nil {
-					return fmt.Errorf("failed to parse merge request URL: %w", err)
-				}
-
-				project, err = fetchProject(ctx, appInstance, projectPath)
-				if err != nil {
-					return err
-				}
-
-				mr, err = fetchMergeRequest(ctx, appInstance, project.ID, mrID)
-				if err != nil {
-					return err
-				}
-			} else {
-				// Infer MR from current git branch
-				currentProject, currentBranch, err := appInstance.GetCurrentProjectInfo(ctx)
-				if err != nil {
-					return fmt.Errorf("failed to get current project info: %w", err)
-				}
-
-				project = currentProject
-				mr, err = appInstance.GetMergeRequestByBranch(ctx, project.ID, currentBranch)
-				if err != nil {
-					return fmt.Errorf("failed to find merge request for branch %s: %w", currentBranch, err)
-				}
-			}
-
-			// Fetch approvals
-			approvals, err := appInstance.GetMergeRequestApprovals(ctx, project.ID, mr.IID)
-			if err != nil {
-				return fmt.Errorf("failed to get merge request approvals: %w", err)
-			}
-
-			// Calculate status
-			now := time.Now()
-			threeWorkingDaysAgo := subtractWorkingDays(now, 3)
-			isStalled := mr.UpdatedAt.Before(threeWorkingDaysAgo)
-
-			mrWithStatus := &domain.MergeRequestWithStatus{
-				MergeRequest:  mr,
-				Approvals:     approvals,
-				ApprovalCount: len(approvals),
-				IsStalled:     isStalled,
-			}
-
-			// Format and display
-			formatted, err := ascii.FormatMRStatus(cfg.BaseURL, mrWithStatus, cfg.IssueURLTemplate)
-			if err != nil {
-				return fmt.Errorf("failed to format output: %w", err)
-			}
-
-			fmt.Print(formatted)
-
-			return nil
+			return showMRStatus(cfg, appInstance, formatter, args)
 		},
-	})
+	}
+}
 
-	cmd.AddCommand(&cobra.Command{
+func showMRStatus(cfg *config.Config, appInstance *app.App, formatter *ascii.Formatter, args []string) error {
+	ctx := context.Background()
+
+	var mr *domain.MergeRequest
+	var project *domain.Project
+	var err error
+
+	if len(args) > 0 {
+		// Parse MR URL
+		projectPath, mrID, err := parseMRURL(cfg.BaseURL, args[0])
+		if err != nil {
+			return fmt.Errorf("failed to parse merge request URL: %w", err)
+		}
+
+		project, err = fetchProject(ctx, appInstance, projectPath)
+		if err != nil {
+			return err
+		}
+
+		mr, err = fetchMergeRequest(ctx, appInstance, project.ID, mrID)
+		if err != nil {
+			return err
+		}
+	} else {
+		// Infer MR from current git branch
+		currentProject, currentBranch, err := appInstance.GetCurrentProjectInfo(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to get current project info: %w", err)
+		}
+
+		project = currentProject
+		mr, err = appInstance.GetMergeRequestByBranch(ctx, project.ID, currentBranch)
+		if err != nil {
+			return fmt.Errorf("failed to find merge request for branch %s: %w", currentBranch, err)
+		}
+	}
+
+	// Fetch approvals
+	approvals, err := appInstance.GetMergeRequestApprovals(ctx, project.ID, mr.IID)
+	if err != nil {
+		return fmt.Errorf("failed to get merge request approvals: %w", err)
+	}
+
+	// Calculate status
+	const workingDaysThreshold = 3
+	now := time.Now()
+	threeWorkingDaysAgo := subtractWorkingDays(now, workingDaysThreshold)
+	isStalled := mr.UpdatedAt.Before(threeWorkingDaysAgo)
+
+	mrWithStatus := &domain.MergeRequestWithStatus{
+		MergeRequest:  mr,
+		Approvals:     approvals,
+		ApprovalCount: len(approvals),
+		IsStalled:     isStalled,
+	}
+
+	// Format and display
+	formatted, err := formatter.FormatMRStatus(cfg.BaseURL, mrWithStatus)
+	if err != nil {
+		return fmt.Errorf("failed to format output: %w", err)
+	}
+
+	fmt.Print(formatted)
+
+	return nil
+}
+
+func newMRBrowseCommand(appInstance *app.App) *cobra.Command {
+	return &cobra.Command{
 		Use:   "browse",
 		Short: "Open merge request in browser",
 		Long:  `Open the merge request for the current git branch in your default browser.`,
 		Args:  cobra.NoArgs,
-		RunE: func(_ *cobra.Command, args []string) error {
+		RunE: func(_ *cobra.Command, _ []string) error {
 			ctx := context.Background()
 
 			// Get current project and branch
@@ -154,12 +172,10 @@ If MR_URL is not provided, it will try to find the merge request for the current
 
 			return nil
 		},
-	})
-
-	return cmd
+	}
 }
 
-func suggestAssignees(cfg *config.Config, appInstance *app.App, mrURL string) error {
+func suggestAssignees(cfg *config.Config, appInstance *app.App, formatter *ascii.Formatter, mrURL string) error {
 	ctx := context.Background()
 
 	projectPath, mrID, err := parseMRURL(cfg.BaseURL, mrURL)
@@ -187,7 +203,7 @@ func suggestAssignees(cfg *config.Config, appInstance *app.App, mrURL string) er
 		return err
 	}
 
-	formatted, err := ascii.FormatMRRoulette(mr, mrURL, workloads, suggestedAssignee, suggestedReviewer, cfg.IssueURLTemplate)
+	formatted, err := formatter.FormatMRRoulette(mr, mrURL, workloads, suggestedAssignee, suggestedReviewer)
 	if err != nil {
 		return fmt.Errorf("failed to format output: %w", err)
 	}

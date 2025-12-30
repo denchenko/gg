@@ -4,12 +4,12 @@ import (
 	"bytes"
 	_ "embed"
 	"fmt"
-	"regexp"
 	"strings"
 	"text/template"
 	"time"
 
 	"github.com/denchenko/gg/internal/core/domain"
+	"github.com/denchenko/gg/internal/issue"
 )
 
 const (
@@ -49,6 +49,18 @@ var (
 	//go:embed mr_status.tmpl
 	mrStatusTemplate string
 )
+
+// Formatter handles formatting of various data structures using templates.
+type Formatter struct {
+	issuer *issue.Issuer
+}
+
+// NewFormatter creates a new Formatter instance with the given Issuer.
+func NewFormatter(issuer *issue.Issuer) *Formatter {
+	return &Formatter{
+		issuer: issuer,
+	}
+}
 
 // TeamWorkloadData holds data for team workload templates.
 type TeamWorkloadData struct {
@@ -96,12 +108,12 @@ type MyActivityData struct {
 }
 
 // FormatTeamWorkload formats team workload data using a template.
-func FormatTeamWorkload(workloads []*domain.UserWorkload, issueURLTemplate string) (string, error) {
-	return executeWorkloadTemplate(teamReviewTemplate, workloads, issueURLTemplate)
+func (f *Formatter) FormatTeamWorkload(workloads []*domain.UserWorkload) (string, error) {
+	return f.executeWorkloadTemplate(teamReviewTemplate, workloads)
 }
 
 // FormatMyMergeRequestStatus formats my merge request status data using a template.
-func FormatMyMergeRequestStatus(baseURL string, mrs []*domain.MergeRequestWithStatus, issueURLTemplate string) (string, error) {
+func (f *Formatter) FormatMyMergeRequestStatus(baseURL string, mrs []*domain.MergeRequestWithStatus) (string, error) {
 	otherMRsByProject := make(map[string][]*domain.MergeRequestWithStatus)
 	for _, mr := range mrs {
 		if !mr.IsCurrentProject {
@@ -110,33 +122,32 @@ func FormatMyMergeRequestStatus(baseURL string, mrs []*domain.MergeRequestWithSt
 		}
 	}
 
-	return executeMyStatusTemplate(baseURL, myMRTemplate, mrs, otherMRsByProject, issueURLTemplate)
+	return f.executeMyStatusTemplate(baseURL, myMRTemplate, mrs, otherMRsByProject)
 }
 
 // FormatMRRoulette formats MR roulette data using a template.
-func FormatMRRoulette(
+func (f *Formatter) FormatMRRoulette(
 	mr *domain.MergeRequest,
 	mrURL string,
 	workloads []*domain.UserWorkload,
 	suggestedAssignee, suggestedReviewer *domain.User,
-	issueURLTemplate string,
 ) (string, error) {
-	return executeMRRouletteTemplate(mrRouletteTemplate, mr, mrURL, workloads, suggestedAssignee, suggestedReviewer, issueURLTemplate)
+	return f.executeMRRouletteTemplate(mrRouletteTemplate, mr, mrURL, workloads, suggestedAssignee, suggestedReviewer)
 }
 
 // FormatMyReviewWorkload formats my review workload data using a template.
-func FormatMyReviewWorkload(baseURL string, mrs []*domain.MergeRequestWithStatus, issueURLTemplate string) (string, error) {
+func (f *Formatter) FormatMyReviewWorkload(baseURL string, mrs []*domain.MergeRequestWithStatus) (string, error) {
 	mrsByProject := make(map[string][]*domain.MergeRequestWithStatus)
 	for _, mr := range mrs {
 		projectName := getProjectName(baseURL, mr.WebURL)
 		mrsByProject[projectName] = append(mrsByProject[projectName], mr)
 	}
 
-	return executeMyReviewTemplate(baseURL, myReviewTemplate, mrsByProject, issueURLTemplate)
+	return f.executeMyReviewTemplate(baseURL, myReviewTemplate, mrsByProject)
 }
 
 // FormatMyActivity formats my activity data using a template.
-func FormatMyActivity(baseURL string, events []*domain.Event, issueURLTemplate string) (string, error) {
+func (f *Formatter) FormatMyActivity(baseURL string, events []*domain.Event) (string, error) {
 	eventsByProject := make(map[string][]*domain.Event)
 	for _, event := range events {
 		projectName := event.ProjectPath
@@ -146,16 +157,16 @@ func FormatMyActivity(baseURL string, events []*domain.Event, issueURLTemplate s
 		eventsByProject[projectName] = append(eventsByProject[projectName], event)
 	}
 
-	return executeMyActivityTemplate(baseURL, myActivityTemplate, eventsByProject, issueURLTemplate)
+	return f.executeMyActivityTemplate(baseURL, myActivityTemplate, eventsByProject)
 }
 
 // FormatMRStatus formats a single merge request status using a template.
-func FormatMRStatus(baseURL string, mr *domain.MergeRequestWithStatus, issueURLTemplate string) (string, error) {
-	return executeMRStatusTemplate(baseURL, mrStatusTemplate, mr, issueURLTemplate)
+func (f *Formatter) FormatMRStatus(baseURL string, mr *domain.MergeRequestWithStatus) (string, error) {
+	return f.executeMRStatusTemplate(baseURL, mrStatusTemplate, mr)
 }
 
-func executeWorkloadTemplate(templateStr string, workloads []*domain.UserWorkload, issueURLTemplate string) (string, error) {
-	tmpl, err := template.New("teamWorkload").Funcs(getWorkloadTemplateFuncs(issueURLTemplate)).Parse(templateStr)
+func (f *Formatter) executeWorkloadTemplate(templateStr string, workloads []*domain.UserWorkload) (string, error) {
+	tmpl, err := template.New("teamWorkload").Funcs(f.getWorkloadTemplateFuncs()).Parse(templateStr)
 
 	if err != nil {
 		return "", fmt.Errorf("failed to parse template: %w", err)
@@ -174,7 +185,7 @@ func executeWorkloadTemplate(templateStr string, workloads []*domain.UserWorkloa
 	return buf.String(), nil
 }
 
-func getWorkloadTemplateFuncs(issueURLTemplate string) template.FuncMap {
+func (f *Formatter) getWorkloadTemplateFuncs() template.FuncMap {
 	return template.FuncMap{
 		"getRole": func(mr *domain.MergeRequest, user *domain.User) string {
 			if mr.Assignee != nil && mr.Assignee.ID == user.ID {
@@ -203,8 +214,10 @@ func getWorkloadTemplateFuncs(issueURLTemplate string) template.FuncMap {
 		},
 		"repeat": strings.Repeat,
 		"getIssueURL": func(title string) string {
-			issueNumber := extractIssueNumber(title)
-			return generateIssueURL(issueNumber, issueURLTemplate)
+			issueNumber := f.issuer.ExtractNumber(title)
+			url, _ := f.issuer.MakeURL(issueNumber)
+
+			return url
 		},
 	}
 }
@@ -290,7 +303,7 @@ func getStatusEmoji(mr *domain.MergeRequestWithStatus) string {
 	return ""
 }
 
-func getMRRouletteTemplateFuncs(workloads []*domain.UserWorkload, issueURLTemplate string) template.FuncMap {
+func (f *Formatter) getMRRouletteTemplateFuncs(workloads []*domain.UserWorkload) template.FuncMap {
 	return template.FuncMap{
 		"formatTime":    formatTime,
 		"joinUsernames": joinUsernames,
@@ -313,13 +326,15 @@ func getMRRouletteTemplateFuncs(workloads []*domain.UserWorkload, issueURLTempla
 			return 0
 		},
 		"getIssueURL": func(title string) string {
-			issueNumber := extractIssueNumber(title)
-			return generateIssueURL(issueNumber, issueURLTemplate)
+			issueNumber := f.issuer.ExtractNumber(title)
+			url, _ := f.issuer.MakeURL(issueNumber)
+
+			return url
 		},
 	}
 }
 
-func getMyStatusTemplateFuncs(baseURL string, issueURLTemplate string) template.FuncMap {
+func (f *Formatter) getMyStatusTemplateFuncs(baseURL string) template.FuncMap {
 	return template.FuncMap{
 		"formatTime":      formatTime,
 		"joinUsernames":   joinUsernames,
@@ -338,13 +353,15 @@ func getMyStatusTemplateFuncs(baseURL string, issueURLTemplate string) template.
 			return a >= b
 		},
 		"getIssueURL": func(title string) string {
-			issueNumber := extractIssueNumber(title)
-			return generateIssueURL(issueNumber, issueURLTemplate)
+			issueNumber := f.issuer.ExtractNumber(title)
+			url, _ := f.issuer.MakeURL(issueNumber)
+
+			return url
 		},
 	}
 }
 
-func getMyReviewTemplateFuncs(baseURL string, issueURLTemplate string) template.FuncMap {
+func (f *Formatter) getMyReviewTemplateFuncs(baseURL string) template.FuncMap {
 	return template.FuncMap{
 		"formatTime":          formatTime,
 		"joinUsernames":       joinUsernames,
@@ -360,21 +377,22 @@ func getMyReviewTemplateFuncs(baseURL string, issueURLTemplate string) template.
 			return a >= b
 		},
 		"getIssueURL": func(title string) string {
-			issueNumber := extractIssueNumber(title)
-			return generateIssueURL(issueNumber, issueURLTemplate)
+			issueNumber := f.issuer.ExtractNumber(title)
+			url, _ := f.issuer.MakeURL(issueNumber)
+
+			return url
 		},
 	}
 }
 
-func executeMRRouletteTemplate(
+func (f *Formatter) executeMRRouletteTemplate(
 	templateStr string,
 	mr *domain.MergeRequest,
 	mrURL string,
 	workloads []*domain.UserWorkload,
 	suggestedAssignee, suggestedReviewer *domain.User,
-	issueURLTemplate string,
 ) (string, error) {
-	tmpl, err := template.New("mrRoulette").Funcs(getMRRouletteTemplateFuncs(workloads, issueURLTemplate)).Parse(templateStr)
+	tmpl, err := template.New("mrRoulette").Funcs(f.getMRRouletteTemplateFuncs(workloads)).Parse(templateStr)
 
 	if err != nil {
 		return "", fmt.Errorf("failed to parse template: %w", err)
@@ -397,14 +415,13 @@ func executeMRRouletteTemplate(
 	return buf.String(), nil
 }
 
-func executeMyStatusTemplate(
+func (f *Formatter) executeMyStatusTemplate(
 	baseURL string,
 	templateStr string,
 	mrs []*domain.MergeRequestWithStatus,
 	otherMRsByProject map[string][]*domain.MergeRequestWithStatus,
-	issueURLTemplate string,
 ) (string, error) {
-	tmpl, err := template.New("myMergeRequestStatus").Funcs(getMyStatusTemplateFuncs(baseURL, issueURLTemplate)).Parse(templateStr)
+	tmpl, err := template.New("myMergeRequestStatus").Funcs(f.getMyStatusTemplateFuncs(baseURL)).Parse(templateStr)
 
 	if err != nil {
 		return "", fmt.Errorf("failed to parse template: %w", err)
@@ -424,13 +441,12 @@ func executeMyStatusTemplate(
 	return buf.String(), nil
 }
 
-func executeMyReviewTemplate(
+func (f *Formatter) executeMyReviewTemplate(
 	baseURL string,
 	templateStr string,
 	mrsByProject map[string][]*domain.MergeRequestWithStatus,
-	issueURLTemplate string,
 ) (string, error) {
-	tmpl, err := template.New("myReview").Funcs(getMyReviewTemplateFuncs(baseURL, issueURLTemplate)).Parse(templateStr)
+	tmpl, err := template.New("myReview").Funcs(f.getMyReviewTemplateFuncs(baseURL)).Parse(templateStr)
 
 	if err != nil {
 		return "", fmt.Errorf("failed to parse template: %w", err)
@@ -451,13 +467,12 @@ func executeMyReviewTemplate(
 	return buf.String(), nil
 }
 
-func executeMyActivityTemplate(
+func (f *Formatter) executeMyActivityTemplate(
 	baseURL string,
 	templateStr string,
 	eventsByProject map[string][]*domain.Event,
-	issueURLTemplate string,
 ) (string, error) {
-	tmpl, err := template.New("myActivity").Funcs(getMyActivityTemplateFuncs(baseURL, issueURLTemplate)).Parse(templateStr)
+	tmpl, err := template.New("myActivity").Funcs(f.getMyActivityTemplateFuncs(baseURL)).Parse(templateStr)
 	if err != nil {
 		return "", fmt.Errorf("failed to parse template: %w", err)
 	}
@@ -475,13 +490,12 @@ func executeMyActivityTemplate(
 	return buf.String(), nil
 }
 
-func executeMRStatusTemplate(
+func (f *Formatter) executeMRStatusTemplate(
 	baseURL string,
 	templateStr string,
 	mr *domain.MergeRequestWithStatus,
-	issueURLTemplate string,
 ) (string, error) {
-	tmpl, err := template.New("mrStatus").Funcs(getMyStatusTemplateFuncs(baseURL, issueURLTemplate)).Parse(templateStr)
+	tmpl, err := template.New("mrStatus").Funcs(f.getMyStatusTemplateFuncs(baseURL)).Parse(templateStr)
 	if err != nil {
 		return "", fmt.Errorf("failed to parse template: %w", err)
 	}
@@ -494,7 +508,7 @@ func executeMRStatusTemplate(
 	return buf.String(), nil
 }
 
-func getMyActivityTemplateFuncs(baseURL string, issueURLTemplate string) template.FuncMap {
+func (f *Formatter) getMyActivityTemplateFuncs(baseURL string) template.FuncMap {
 	return template.FuncMap{
 		"formatTime":                formatTime,
 		"getProjectName":            func(webURL string) string { return getProjectName(baseURL, webURL) },
@@ -505,8 +519,10 @@ func getMyActivityTemplateFuncs(baseURL string, issueURLTemplate string) templat
 			return "\033[1m" + text + "\033[0m"
 		},
 		"getIssueURL": func(title string) string {
-			issueNumber := extractIssueNumber(title)
-			return generateIssueURL(issueNumber, issueURLTemplate)
+			issueNumber := f.issuer.ExtractNumber(title)
+			url, _ := f.issuer.MakeURL(issueNumber)
+
+			return url
 		},
 	}
 }
@@ -633,38 +649,4 @@ func pluralize(count int) string {
 	}
 
 	return "s"
-}
-
-// extractIssueNumber extracts the first issue number from a merge request title.
-// Issue numbers match the pattern [A-Z]+\-[0-9]+ (e.g., TWGM-606, JIRA-123).
-func extractIssueNumber(title string) string {
-	re := regexp.MustCompile(`[A-Z]+\-[0-9]+`)
-	matches := re.FindString(title)
-	return matches
-}
-
-// generateIssueURL generates an issue URL from a template and issue number.
-// Returns empty string if issue number is empty or template is not configured.
-func generateIssueURL(issueNumber, urlTemplate string) string {
-	if issueNumber == "" || urlTemplate == "" {
-		return ""
-	}
-
-	tmpl, err := template.New("issueURL").Parse(urlTemplate)
-	if err != nil {
-		return ""
-	}
-
-	var buf bytes.Buffer
-	data := struct {
-		Issue string
-	}{
-		Issue: issueNumber,
-	}
-
-	if err := tmpl.Execute(&buf, data); err != nil {
-		return ""
-	}
-
-	return buf.String()
 }
