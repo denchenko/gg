@@ -56,6 +56,7 @@ Environment:
 - `GG_TEAM` (required) - Comma-separated list of team member usernames (e.g., `user1,user2,user3`)
 - `GG_BASE_URL` (optional) - GitLab instance URL (defaults to `https://gitlab.com`)
 - `GG_WEBHOOK_ADDRESS` (optional) - Web Hook listen address (defaults to `:8080`)
+- `GG_ISSUE_URL_TEMPLATE` (optional) - Template for generating issue URLs. Must contain `{{.Issue}}` placeholder (e.g., `https://jira.com/browse/{{.Issue}}`)
 
 The current project, branch, and merge request can be infered from the Git repository you run it in, so most commands work without manually passing these identifiers.
 
@@ -74,7 +75,10 @@ The CLI provides commands for managing merge requests and analyzing team workloa
 - `gg my review` - Display your review workload (MRs assigned to you or requiring your review)
 - `gg my activity` - Show your activity events (pushes, comments, MR actions, etc.). Defaults to events from the last working day
 - `gg team review` - Show team-wide workload overview with active MR counts per member
-- `gg mr roulette [MR_URL]` - Analyze team workload and suggest optimal assignee and reviewer for a merge request
+- `gg mr roulette` - Analyze team workload and suggest optimal assignee and reviewer for a merge request
+- `gg mr status` - Show detailed status information for a merge request
+- `gg mr browse` - Open the merge request for the current git branch in your default browser
+- `gg issue browse` - Open the issue linked to the current branch's merge request in your default browser
 
 ### Webhook Server
 
