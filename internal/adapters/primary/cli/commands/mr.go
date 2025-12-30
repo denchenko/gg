@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/denchenko/gg/internal/config"
 	"github.com/denchenko/gg/internal/core/app"
@@ -39,6 +40,79 @@ If MR_URL is not provided, it will try to get the current merge request URL from
 			}
 
 			return suggestAssignees(cfg, appInstance, mrURL)
+		},
+	})
+
+	cmd.AddCommand(&cobra.Command{
+		Use:   "status [MR_URL]",
+		Short: "Show status of a merge request",
+		Long: `Display detailed status information for a merge request.
+If MR_URL is not provided, it will try to find the merge request for the current git branch.`,
+		Args: cobra.MaximumNArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			ctx := context.Background()
+
+			var mr *domain.MergeRequest
+			var project *domain.Project
+			var err error
+
+			if len(args) > 0 {
+				// Parse MR URL
+				projectPath, mrID, err := parseMRURL(cfg.BaseURL, args[0])
+				if err != nil {
+					return fmt.Errorf("failed to parse merge request URL: %w", err)
+				}
+
+				project, err = fetchProject(ctx, appInstance, projectPath)
+				if err != nil {
+					return err
+				}
+
+				mr, err = fetchMergeRequest(ctx, appInstance, project.ID, mrID)
+				if err != nil {
+					return err
+				}
+			} else {
+				// Infer MR from current git branch
+				currentProject, currentBranch, err := appInstance.GetCurrentProjectInfo(ctx)
+				if err != nil {
+					return fmt.Errorf("failed to get current project info: %w", err)
+				}
+
+				project = currentProject
+				mr, err = appInstance.GetMergeRequestByBranch(ctx, project.ID, currentBranch)
+				if err != nil {
+					return fmt.Errorf("failed to find merge request for branch %s: %w", currentBranch, err)
+				}
+			}
+
+			// Fetch approvals
+			approvals, err := appInstance.GetMergeRequestApprovals(ctx, project.ID, mr.IID)
+			if err != nil {
+				return fmt.Errorf("failed to get merge request approvals: %w", err)
+			}
+
+			// Calculate status
+			now := time.Now()
+			threeWorkingDaysAgo := subtractWorkingDays(now, 3)
+			isStalled := mr.UpdatedAt.Before(threeWorkingDaysAgo)
+
+			mrWithStatus := &domain.MergeRequestWithStatus{
+				MergeRequest:  mr,
+				Approvals:     approvals,
+				ApprovalCount: len(approvals),
+				IsStalled:     isStalled,
+			}
+
+			// Format and display
+			formatted, err := ascii.FormatMRStatus(cfg.BaseURL, mrWithStatus)
+			if err != nil {
+				return fmt.Errorf("failed to format output: %w", err)
+			}
+
+			fmt.Print(formatted)
+
+			return nil
 		},
 	})
 
@@ -221,4 +295,18 @@ func parseMRURL(baseURL, mrURL string) (projectPath string, mrID int, err error)
 	}
 
 	return projectPath, mrID, nil
+}
+
+func subtractWorkingDays(date time.Time, days int) time.Time {
+	result := date
+	subtractedDays := 0
+
+	for subtractedDays < days {
+		result = result.AddDate(0, 0, -1)
+		if result.Weekday() != time.Saturday && result.Weekday() != time.Sunday {
+			subtractedDays++
+		}
+	}
+
+	return result
 }

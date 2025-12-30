@@ -44,6 +44,9 @@ var (
 
 	//go:embed my_activity.tmpl
 	myActivityTemplate string
+
+	//go:embed mr_status.tmpl
+	mrStatusTemplate string
 )
 
 // TeamWorkloadData holds data for team workload templates.
@@ -154,6 +157,11 @@ func FormatMyActivity(baseURL string, events []*domain.Event) (string, error) {
 	}
 
 	return executeMyActivityTemplate(baseURL, myActivityTemplate, eventsByProject)
+}
+
+// FormatMRStatus formats a single merge request status using a template.
+func FormatMRStatus(baseURL string, mr *domain.MergeRequestWithStatus) (string, error) {
+	return executeMRStatusTemplate(baseURL, mrStatusTemplate, mr)
 }
 
 func executeWorkloadTemplate(templateStr string, workloads []*domain.UserWorkload) (string, error) {
@@ -451,6 +459,24 @@ func executeMyActivityTemplate(
 
 	var buf bytes.Buffer
 	if err := tmpl.Execute(&buf, data); err != nil {
+		return "", fmt.Errorf("failed to execute template: %w", err)
+	}
+
+	return buf.String(), nil
+}
+
+func executeMRStatusTemplate(
+	baseURL string,
+	templateStr string,
+	mr *domain.MergeRequestWithStatus,
+) (string, error) {
+	tmpl, err := template.New("mrStatus").Funcs(getMyStatusTemplateFuncs(baseURL)).Parse(templateStr)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse template: %w", err)
+	}
+
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, mr); err != nil {
 		return "", fmt.Errorf("failed to execute template: %w", err)
 	}
 

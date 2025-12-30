@@ -1,0 +1,16 @@
+{{formatBoxTitle (getProjectName .WebURL)}}
+│
+│ {{getStatusEmoji .}}{{if .Draft}}Draft: {{end}}{{.Title}}
+│   URL: {{.WebURL}}
+{{- if .Assignee}}
+│   Assignee: {{.Assignee.Username}}
+{{- else}}
+│   Assignee: None
+{{- end}}
+│   Reviewers: {{ if .Reviewers}}{{joinUsernames .Reviewers}}{{else}}None{{end}}
+│   Approvals: {{ if .Approvals}}{{joinUsernames .Approvals}}{{else}}None{{end}}
+│   Created: {{formatTime .CreatedAt}}
+│   Updated: {{formatTime .UpdatedAt}}
+│
+{{formatBoxBottom}}
+

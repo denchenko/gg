@@ -272,6 +272,34 @@ func (a *App) GetMergeRequest(ctx context.Context, projectID, mrID int) (*domain
 	return mr, nil
 }
 
+// GetMergeRequestByBranch retrieves a merge request by project ID and source branch.
+func (a *App) GetMergeRequestByBranch(ctx context.Context, projectID int, branch string) (*domain.MergeRequest, error) {
+	mrs, err := a.repo.ListMergeRequests(ctx, "opened", "all")
+	if err != nil {
+		return nil, fmt.Errorf("failed to list merge requests: %w", err)
+	}
+
+	var matchingMRs []*domain.MergeRequest
+	for _, mr := range mrs {
+		if mr.ProjectID == projectID && mr.SourceBranch == branch {
+			matchingMRs = append(matchingMRs, mr)
+		}
+	}
+
+	if len(matchingMRs) == 0 {
+		return nil, fmt.Errorf("no merge request found for branch %s", branch)
+	}
+
+	if len(matchingMRs) > 1 {
+		// If multiple MRs match, return the most recently updated one
+		sort.Slice(matchingMRs, func(i, j int) bool {
+			return matchingMRs[i].UpdatedAt.After(matchingMRs[j].UpdatedAt)
+		})
+	}
+
+	return matchingMRs[0], nil
+}
+
 // ListMergeRequests lists merge requests with the given state and scope.
 func (a *App) ListMergeRequests(ctx context.Context, state string, scope ...string) ([]*domain.MergeRequest, error) {
 	mrs, err := a.repo.ListMergeRequests(ctx, state, scope...)
