@@ -14,6 +14,7 @@ func TestNew(t *testing.T) {
 	originalTeam := os.Getenv("GG_TEAM")
 	originalBaseURL := os.Getenv("GG_BASE_URL")
 	originalWebhookAddr := os.Getenv("GG_WEBHOOK_ADDRESS")
+	originalIssueURLTemplate := os.Getenv("GG_ISSUE_URL_TEMPLATE")
 
 	// Clean up after test
 	defer func() {
@@ -36,6 +37,11 @@ func TestNew(t *testing.T) {
 			_ = os.Setenv("GG_WEBHOOK_ADDRESS", originalWebhookAddr)
 		} else {
 			_ = os.Unsetenv("GG_WEBHOOK_ADDRESS")
+		}
+		if originalIssueURLTemplate != "" {
+			_ = os.Setenv("GG_ISSUE_URL_TEMPLATE", originalIssueURLTemplate)
+		} else {
+			_ = os.Unsetenv("GG_ISSUE_URL_TEMPLATE")
 		}
 	}()
 
@@ -113,6 +119,39 @@ func TestNew(t *testing.T) {
 				assert.Equal(t, []string{"user1", "user2", "user3"}, cfg.TeamUsers)
 			},
 		},
+		{
+			name: "valid issue URL template",
+			setupEnv: func() {
+				_ = os.Setenv("GG_TOKEN", "test-token")
+				_ = os.Setenv("GG_TEAM", "user1")
+				_ = os.Setenv("GG_ISSUE_URL_TEMPLATE", "https://jira.com/browse/{{.Issue}}")
+			},
+			expectError: false,
+			validate: func(t *testing.T, cfg *Config) {
+				assert.Equal(t, "https://jira.com/browse/{{.Issue}}", cfg.IssueURLTemplate)
+			},
+		},
+		{
+			name: "invalid issue URL template without placeholder",
+			setupEnv: func() {
+				_ = os.Setenv("GG_TOKEN", "test-token")
+				_ = os.Setenv("GG_TEAM", "user1")
+				_ = os.Setenv("GG_ISSUE_URL_TEMPLATE", "https://jira.com/browse/")
+			},
+			expectError: true,
+		},
+		{
+			name: "empty issue URL template",
+			setupEnv: func() {
+				_ = os.Setenv("GG_TOKEN", "test-token")
+				_ = os.Setenv("GG_TEAM", "user1")
+				_ = os.Unsetenv("GG_ISSUE_URL_TEMPLATE")
+			},
+			expectError: false,
+			validate: func(t *testing.T, cfg *Config) {
+				assert.Equal(t, "", cfg.IssueURLTemplate)
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -122,6 +161,7 @@ func TestNew(t *testing.T) {
 			_ = os.Unsetenv("GG_TEAM")
 			_ = os.Unsetenv("GG_BASE_URL")
 			_ = os.Unsetenv("GG_WEBHOOK_ADDRESS")
+			_ = os.Unsetenv("GG_ISSUE_URL_TEMPLATE")
 
 			tt.setupEnv()
 

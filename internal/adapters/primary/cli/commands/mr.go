@@ -114,7 +114,7 @@ If MR_URL is not provided, it will try to find the merge request for the current
 			}
 
 			// Format and display
-			formatted, err := ascii.FormatMRStatus(cfg.BaseURL, mrWithStatus)
+			formatted, err := ascii.FormatMRStatus(cfg.BaseURL, mrWithStatus, cfg.IssueURLTemplate)
 			if err != nil {
 				return fmt.Errorf("failed to format output: %w", err)
 			}
@@ -156,7 +156,7 @@ func suggestAssignees(cfg *config.Config, appInstance *app.App, mrURL string) er
 		return err
 	}
 
-	formatted, err := ascii.FormatMRRoulette(mr, mrURL, workloads, suggestedAssignee, suggestedReviewer)
+	formatted, err := ascii.FormatMRRoulette(mr, mrURL, workloads, suggestedAssignee, suggestedReviewer, cfg.IssueURLTemplate)
 	if err != nil {
 		return fmt.Errorf("failed to format output: %w", err)
 	}

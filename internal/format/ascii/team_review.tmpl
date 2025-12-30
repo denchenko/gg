@@ -7,6 +7,9 @@
 {{- range $index, $mr := .ActiveMRs}}
 │   * {{$mr.Title}} ({{getRole $mr $workload.User}})
 │     URL: {{$mr.WebURL}}
+{{- if getIssueURL $mr.Title}}
+│     Issue: {{getIssueURL $mr.Title}}
+{{- end}}
 {{- if $mr.Author}}
 │     Author: {{$mr.Author.Username}}
 {{- end}}

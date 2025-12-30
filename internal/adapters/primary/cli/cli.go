@@ -19,7 +19,7 @@ func Command(i do.Injector) (*cobra.Command, error) {
 
 	cmd.AddCommand(
 		commands.My(cfg, appInstance),
-		commands.Team(appInstance),
+		commands.Team(cfg, appInstance),
 		commands.MR(cfg, appInstance),
 	)
 

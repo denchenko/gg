@@ -2,6 +2,9 @@
 │
 │ {{getStatusEmoji .}}{{if .Draft}}Draft: {{end}}{{.Title}}
 │   URL: {{.WebURL}}
+{{- if getIssueURL .Title}}
+│   Issue: {{getIssueURL .Title}}
+{{- end}}
 {{- if .Assignee}}
 │   Assignee: {{.Assignee.Username}}
 {{- else}}

@@ -39,6 +39,9 @@ No open merge requests found.
 {{- if .IsCurrentProject}}
 │ {{getStatusEmoji .}}{{if .IsCurrentBranch}}{{bold .Title}}{{else}}{{.Title}}{{end}}
 │   URL: {{.WebURL}}
+{{- if getIssueURL .Title}}
+│   Issue: {{getIssueURL .Title}}
+{{- end}}
 {{- if .Assignee}}
 │   Assignee: {{.Assignee.Username}}
 {{- end}}
@@ -64,6 +67,9 @@ No open merge requests found.
 {{- range $mrs }}
 │ {{getStatusEmoji .}}{{.Title}}
 │   URL: {{.WebURL}}
+{{- if getIssueURL .Title}}
+│   Issue: {{getIssueURL .Title}}
+{{- end}}
 {{- if .Assignee}}
 │   Assignee: {{.Assignee.Username}}
 {{- end}}

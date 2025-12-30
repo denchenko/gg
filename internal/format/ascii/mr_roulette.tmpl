@@ -4,6 +4,9 @@ Merge Request Analysis
 MR Information:
   Title: {{.MergeRequest.Title}}
   URL: {{.MRURL}}
+{{- if getIssueURL .MergeRequest.Title}}
+  Issue: {{getIssueURL .MergeRequest.Title}}
+{{- end}}
 {{- if .MergeRequest.Author}}
   Author: {{.MergeRequest.Author.Username}}
 {{- end}}

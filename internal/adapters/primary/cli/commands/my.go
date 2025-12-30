@@ -67,7 +67,7 @@ func showMyReviewWorkload(cfg *config.Config, appInstance *app.App) error {
 		return fmt.Errorf("failed to get review workload: %w", err)
 	}
 
-	formatted, err := ascii.FormatMyReviewWorkload(cfg.BaseURL, mrsWithStatus)
+	formatted, err := ascii.FormatMyReviewWorkload(cfg.BaseURL, mrsWithStatus, cfg.IssueURLTemplate)
 	if err != nil {
 		return fmt.Errorf("failed to format output: %w", err)
 	}
@@ -95,7 +95,7 @@ func showMyMRStatus(cfg *config.Config, appInstance *app.App) error {
 		return fmt.Errorf("failed to get merge requests: %w", err)
 	}
 
-	formatted, err := ascii.FormatMyMergeRequestStatus(cfg.BaseURL, mrsWithStatus)
+	formatted, err := ascii.FormatMyMergeRequestStatus(cfg.BaseURL, mrsWithStatus, cfg.IssueURLTemplate)
 	if err != nil {
 		return fmt.Errorf("failed to format output: %w", err)
 	}
@@ -152,7 +152,7 @@ func showMyActivity(cfg *config.Config, appInstance *app.App, afterStr, beforeSt
 		return fmt.Errorf("failed to get activity: %w", err)
 	}
 
-	formatted, err := ascii.FormatMyActivity(cfg.BaseURL, events)
+	formatted, err := ascii.FormatMyActivity(cfg.BaseURL, events, cfg.IssueURLTemplate)
 	if err != nil {
 		return fmt.Errorf("failed to format output: %w", err)
 	}

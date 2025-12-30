@@ -23,6 +23,9 @@ No review workload found.
 {{- range $mrs }}
 │ {{getStatusEmoji .}}{{if .IsCurrentBranch}}{{bold .Title}}{{else}}{{.Title}}{{end}}
 │   URL: {{.WebURL}}
+{{- if getIssueURL .Title}}
+│   Issue: {{getIssueURL .Title}}
+{{- end}}
 {{- if .Assignee}}
 │   Assignee: {{.Assignee.Username}}
 {{- end}}

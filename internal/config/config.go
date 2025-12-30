@@ -14,10 +14,11 @@ var Package = do.Package(
 
 // Config holds the application configuration.
 type Config struct {
-	BaseURL        string
-	Token          string
-	TeamUsers      []string
-	WebhookAddress string
+	BaseURL         string
+	Token           string
+	TeamUsers       []string
+	WebhookAddress  string
+	IssueURLTemplate string
 }
 
 // NewConfig creates a new configuration from environment variables (for DI).
@@ -52,10 +53,16 @@ func New() (*Config, error) {
 		teamUsers[i] = strings.TrimSpace(user)
 	}
 
+	issueURLTemplate := os.Getenv("GG_ISSUE_URL_TEMPLATE")
+	if issueURLTemplate != "" && !strings.Contains(issueURLTemplate, "{{.Issue}}") {
+		return nil, errors.New("GG_ISSUE_URL_TEMPLATE must contain {{.Issue}} placeholder")
+	}
+
 	return &Config{
-		BaseURL:        gitServiceURL,
-		Token:          privateToken,
-		TeamUsers:      teamUsers,
-		WebhookAddress: webhookAddress,
+		BaseURL:          gitServiceURL,
+		Token:            privateToken,
+		TeamUsers:        teamUsers,
+		WebhookAddress:   webhookAddress,
+		IssueURLTemplate: issueURLTemplate,
 	}, nil
 }
