@@ -55,12 +55,6 @@ type TeamWorkloadData struct {
 	Timestamp time.Time
 }
 
-// MergeRequestWithApprovals represents a merge request with its approvals.
-type MergeRequestWithApprovals struct {
-	*domain.MergeRequest
-	Approvals []*domain.User
-}
-
 // MergeRequestWithStatus represents a merge request with status information for templates.
 type MergeRequestWithStatus struct {
 	*domain.MergeRequest
@@ -69,12 +63,6 @@ type MergeRequestWithStatus struct {
 	IsStalled        bool
 	IsCurrentBranch  bool
 	IsCurrentProject bool
-}
-
-// MergeRequestStatusData holds data for merge request status templates.
-type MergeRequestStatusData struct {
-	MergeRequests []*MergeRequestWithApprovals
-	Timestamp     time.Time
 }
 
 // MyMergeRequestStatusData holds data for my merge request status templates.

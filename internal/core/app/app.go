@@ -147,48 +147,6 @@ func (a *App) AnalyzeActiveMRs(ctx context.Context) ([]*domain.UserWorkload, err
 	return workloads, nil
 }
 
-// AnalyzeMyReviewWorkload analyzes the current user's review workload.
-func (a *App) AnalyzeMyReviewWorkload(ctx context.Context) (*domain.UserWorkload, error) {
-	currentUser, err := a.getCurrentUser(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get current user: %w", err)
-	}
-
-	// Get all opened merge requests
-	mrs, err := a.repo.ListMergeRequests(ctx, "opened", "all")
-	if err != nil {
-		return nil, fmt.Errorf("failed to get merge requests: %w", err)
-	}
-
-	var relevantMRs []*domain.MergeRequest
-	for _, mr := range mrs {
-		if isUserInvolvedInMR(mr, currentUser.ID) {
-			relevantMRs = append(relevantMRs, mr)
-		}
-	}
-
-	// Get approvals for relevant MRs
-	approvalsMap, err := a.fetchMRApprovals(ctx, relevantMRs)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get MR approvals: %w", err)
-	}
-
-	activeMRCount := 0
-	var activeMRs []*domain.MergeRequest
-	for _, mr := range relevantMRs {
-		if !hasUserApprovedMR(approvalsMap[mr.IID], currentUser.ID) {
-			activeMRCount++
-			activeMRs = append(activeMRs, mr)
-		}
-	}
-
-	return &domain.UserWorkload{
-		User:      currentUser,
-		MRCount:   activeMRCount,
-		ActiveMRs: activeMRs,
-	}, nil
-}
-
 func (a *App) getCurrentUser(ctx context.Context) (*domain.User, error) {
 	user, err := a.repo.GetCurrentUser(ctx)
 	if err != nil {
@@ -298,16 +256,6 @@ func (a *App) GetMergeRequestByBranch(ctx context.Context, projectID int, branch
 	}
 
 	return matchingMRs[0], nil
-}
-
-// ListMergeRequests lists merge requests with the given state and scope.
-func (a *App) ListMergeRequests(ctx context.Context, state string, scope ...string) ([]*domain.MergeRequest, error) {
-	mrs, err := a.repo.ListMergeRequests(ctx, state, scope...)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list merge requests: %w", err)
-	}
-
-	return mrs, nil
 }
 
 // GetMergeRequestApprovals retrieves approvals for a merge request.

@@ -105,25 +105,6 @@ func TestApp_GetMergeRequest(t *testing.T) {
 	repo.AssertExpectations(t)
 }
 
-func TestApp_ListMergeRequests(t *testing.T) {
-	ctx := context.Background()
-	repo := &mocks.MockRepository{}
-	app := &App{repo: repo, teamUsers: []string{}}
-
-	expectedMRs := []*domain.MergeRequest{
-		{ID: 1, IID: 1, Title: "MR 1"},
-		{ID: 2, IID: 2, Title: "MR 2"},
-	}
-
-	repo.On("ListMergeRequests", ctx, "opened", []string{"all"}).Return(expectedMRs, nil)
-
-	mrs, err := app.ListMergeRequests(ctx, "opened", "all")
-
-	require.NoError(t, err)
-	assert.Equal(t, expectedMRs, mrs)
-	repo.AssertExpectations(t)
-}
-
 func TestApp_UpdateMergeRequest(t *testing.T) {
 	ctx := context.Background()
 	repo := &mocks.MockRepository{}
@@ -348,74 +329,6 @@ func TestApp_AnalyzeActiveMRs(t *testing.T) {
 			workloads, err := app.AnalyzeActiveMRs(ctx)
 
 			tt.validate(t, workloads, err)
-			repo.AssertExpectations(t)
-		})
-	}
-}
-
-func TestApp_AnalyzeMyReviewWorkload(t *testing.T) {
-	ctx := context.Background()
-
-	tests := []struct {
-		name      string
-		setupMock func(*mocks.MockRepository)
-		validate  func(*testing.T, *domain.UserWorkload, error)
-	}{
-		{
-			name: "successful analysis",
-			setupMock: func(m *mocks.MockRepository) {
-				currentUser := &domain.User{ID: 1, Username: "current"}
-				mrs := []*domain.MergeRequest{
-					{
-						ID: 1, IID: 1, ProjectID: 1,
-						Assignee: currentUser,
-						Author:   &domain.User{ID: 2},
-					},
-				}
-				m.On("GetCurrentUser", mock.Anything).Return(currentUser, nil)
-				m.On("ListMergeRequests", mock.Anything, "opened", []string{"all"}).Return(mrs, nil)
-				m.On("GetMergeRequestApprovals", mock.Anything, 1, 1).Return([]*domain.User{}, nil)
-			},
-			validate: func(t *testing.T, workload *domain.UserWorkload, err error) {
-				require.NoError(t, err)
-				assert.NotNil(t, workload)
-				assert.Equal(t, 1, workload.MRCount)
-				assert.Len(t, workload.ActiveMRs, 1)
-			},
-		},
-		{
-			name: "error getting current user",
-			setupMock: func(m *mocks.MockRepository) {
-				m.On("GetCurrentUser", mock.Anything).Return(nil, errors.New("auth error"))
-			},
-			validate: func(t *testing.T, workload *domain.UserWorkload, err error) {
-				require.Error(t, err)
-				assert.Nil(t, workload)
-			},
-		},
-		{
-			name: "error listing merge requests",
-			setupMock: func(m *mocks.MockRepository) {
-				currentUser := &domain.User{ID: 1, Username: "current"}
-				m.On("GetCurrentUser", mock.Anything).Return(currentUser, nil)
-				m.On("ListMergeRequests", mock.Anything, "opened", []string{"all"}).Return(nil, errors.New("api error"))
-			},
-			validate: func(t *testing.T, workload *domain.UserWorkload, err error) {
-				require.Error(t, err)
-				assert.Nil(t, workload)
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			repo := &mocks.MockRepository{}
-			tt.setupMock(repo)
-			app := &App{repo: repo, teamUsers: []string{}}
-
-			workload, err := app.AnalyzeMyReviewWorkload(ctx)
-
-			tt.validate(t, workload, err)
 			repo.AssertExpectations(t)
 		})
 	}
